@@ -1,0 +1,6 @@
+test-golden/parser/0002-broken-bad-method.req:1:4:
+  |
+1 | 1: 1
+  |    ^
+unexpected '1'
+expecting HTTP method (GET, POST, ...)

@@ -1,0 +1,5 @@
+test-golden/parser/0007-broken-spaces.req:3:2:
+  |
+3 |  ---
+  |  ^
+unexpected space at the beginning of line

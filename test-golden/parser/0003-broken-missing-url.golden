@@ -1,0 +1,6 @@
+test-golden/parser/0003-broken-missing-url.req:1:7:
+  |
+1 | 1: GET
+  |       ^
+unexpected newline
+expecting "{:r", HTTP method (GET, POST, ...), or URL text segment

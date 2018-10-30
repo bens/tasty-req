@@ -1,0 +1,10 @@
+[ Command
+    { command'ident = 1
+    , command'always = False
+    , command'method = "POST"
+    , command'url = [ Right "/" ]
+    , command'request_body = []
+    , command'response_body =
+        [ JsonCustom "r" (Left (Ref 1 Response [])) ]
+    }
+]

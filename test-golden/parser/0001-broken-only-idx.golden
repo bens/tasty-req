@@ -1,0 +1,6 @@
+test-golden/parser/0001-broken-only-idx.req:1:2:
+  |
+1 | 1
+  |  ^
+unexpected newline
+expecting '*', ':', or digit

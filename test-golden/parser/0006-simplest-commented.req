@@ -1,0 +1,8 @@
+# first line comment
+1: GET /  # this is a header
+# comment before separator
+---  # separator
+# after separator
+{ # comment in an object
+}
+# eof

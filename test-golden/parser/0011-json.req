@@ -1,0 +1,19 @@
+1: GET /
+---
+{ "a": null,
+  "b": true,
+  "c": false,
+  "d"
+:
+"foo"
+,
+  "e": "abc\nxyz\tuvw",
+  "f": [1,2, 
+3 ],
+  "g": { "x": 
+null, 
+ 	"y": true
+, "z"
+: false
+ },
+  }

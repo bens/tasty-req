@@ -1,0 +1,6 @@
+test-golden/parser/0004-broken-heading-only.req:2:1:
+  |
+2 | <empty line>
+  | ^
+unexpected end of input
+expecting "---"
