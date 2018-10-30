@@ -1,18 +1,19 @@
 [ Command
-    { command'ident = 1
+    { command'id = 1
     , command'always = False
     , command'method = "GET"
     , command'url = [ Right "/" ]
     , command'request_body = []
     , command'response_body =
         [ JsonObject
-            (fromList
-               [ ( "a" , JsonCustom "t" (Right TyNumber) )
-               , ( "b" , JsonCustom "t" (Right TyString) )
-               , ( "c" , JsonCustom "t" (Right TyBool) )
-               , ( "d" , JsonCustom "t" (Right (TyMaybe TyString)) )
-               , ( "e" , JsonCustom "t" (Right (TyMaybe (TyMaybe TyString))) )
-               ])
+            (Object
+               (fromList
+                  [ ( "a" , JsonCustom "t" (Right TyInteger) )
+                  , ( "b" , JsonCustom "t" (Right TyDouble) )
+                  , ( "c" , JsonCustom "t" (Right TyString) )
+                  , ( "d" , JsonCustom "t" (Right TyBool) )
+                  , ( "e" , JsonCustom "t" (Right (TyMaybe TyString)) )
+                  ]))
         ]
     }
 ]

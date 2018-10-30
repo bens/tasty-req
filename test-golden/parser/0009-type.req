@@ -1,8 +1,8 @@
 1: GET /
 ---
-{ "a": {:t number},
-  "b": {:t string},
-  "c": {:t boolean},
-  "d": {:t maybe string},
-  "e": {:t maybe (maybe string)}
+{ "a": {:t integer},
+  "b": {:t double},
+  "c": {:t string},
+  "d": {:t boolean},
+  "e": {:t maybe string},
   }

@@ -1,9 +1,9 @@
 [ Command
-    { command'ident = 1
+    { command'id = 1
     , command'always = False
     , command'method = "GET"
     , command'url = [ Right "/" ]
     , command'request_body = []
-    , command'response_body = [ JsonObject (fromList []) ]
+    , command'response_body = [ JsonObject (Object (fromList [])) ]
     }
 ]

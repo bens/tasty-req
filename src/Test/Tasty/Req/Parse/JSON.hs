@@ -9,7 +9,7 @@ module Test.Tasty.Req.Parse.JSON
   ( -- * JSON Values
     Value(..), ppValue, substitute, discardCustom
     -- * JSON Objects
-  , Object(..), ppObject
+  , Object(..), getObject, ppObject
   -- * Parsers
   , Parser, runParser
   -- * Custom Parsers
@@ -62,8 +62,11 @@ discardCustom :: Value a -> Value ()
 discardCustom = void
 
 newtype Object a
-  = Object{ getObject :: Map Text (Value a) }
+  = Object (Map Text (Value a))
     deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+getObject :: Object a -> Map Text (Value a)
+getObject (Object x) = x
 
 instance Semigroup (Object a) where
   Object a <> Object b = Object (a <> b)

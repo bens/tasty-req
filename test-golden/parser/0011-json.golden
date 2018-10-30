@@ -1,26 +1,28 @@
 [ Command
-    { command'ident = 1
+    { command'id = 1
     , command'always = False
     , command'method = "GET"
     , command'url = [ Right "/" ]
     , command'request_body = []
     , command'response_body =
         [ JsonObject
-            (fromList
-               [ ( "a" , JsonNull )
-               , ( "b" , JsonTrue )
-               , ( "c" , JsonFalse )
-               , ( "d" , JsonText "foo" )
-               , ( "e" , JsonText "abc\nxyz\tuvw" )
-               , ( "f"
-                 , JsonArray [ JsonNumber 1.0 , JsonNumber 2.0 , JsonNumber 3.0 ]
-                 )
-               , ( "g"
-                 , JsonObject
-                     (fromList
-                        [ ( "x" , JsonNull ) , ( "y" , JsonTrue ) , ( "z" , JsonFalse ) ])
-                 )
-               ])
+            (Object
+               (fromList
+                  [ ( "a" , JsonNull )
+                  , ( "b" , JsonTrue )
+                  , ( "c" , JsonFalse )
+                  , ( "d" , JsonText "foo" )
+                  , ( "e" , JsonText "abc\nxyz\tuvw" )
+                  , ( "f"
+                    , JsonArray [ JsonInteger 1 , JsonInteger 2 , JsonInteger 3 ]
+                    )
+                  , ( "g"
+                    , JsonObject
+                        (Object
+                           (fromList
+                              [ ( "x" , JsonNull ) , ( "y" , JsonTrue ) , ( "z" , JsonFalse ) ]))
+                    )
+                  ]))
         ]
     }
 ]
