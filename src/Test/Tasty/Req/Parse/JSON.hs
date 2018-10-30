@@ -22,20 +22,18 @@ module Test.Tasty.Req.Parse.JSON
   ) where
 
 import Control.Applicative
-import Control.Monad (void)
-import Data.Char (chr, isDigit, isHexDigit, isLower, isUpper, ord)
-import Data.Foldable (asum)
-import Data.List (foldl', intersperse)
-import Data.Map (Map)
--- import Data.Scientific (Scientific)
-import Data.Text (Text)
+import Control.Monad                  (void)
+import Data.Char                      (chr, isDigit, isHexDigit, isLower, isUpper, ord)
+import Data.Foldable                  (asum)
+import Data.List                      (foldl', intersperse)
+import Data.Map                       (Map)
+import Data.Text                      (Text)
 
-import qualified Data.Map as Map
-import qualified Data.Text as Text
-import qualified Text.Megaparsec as P
+import qualified Data.Map             as Map
+import qualified Data.Text            as Text
+import qualified Text.Megaparsec      as P
 import qualified Text.Megaparsec.Char as P.C
-import qualified Text.Megaparsec.Char.Lexer as P.L
-import qualified Text.PrettyPrint as PP
+import qualified Text.PrettyPrint     as PP
 
 import Test.Tasty.Req.Parse.Common
 
@@ -228,19 +226,19 @@ number' = otherParser $ \_ -> P.label "number" $ do
       digits <- (:) <$> P.oneOf ['1'..'9'] <*> many P.C.digitChar
       pure $! foldl' (\i x -> i * 10 + val x) 0 digits
     double :: (Ord e) => Double -> P.ParsecT e Text m Double
-    double as = decimals as <|> exponent as
+    double as = decimals as <|> scinot as
     decimals :: (Ord e) => Double -> P.ParsecT e Text m Double
     decimals as = do
       digits <- P.C.char '.' *> some P.C.digitChar
       let bs = 0.1 * foldr (\x i -> i / 10 + fromIntegral (val x)) 0 digits
-      exponent (as + bs) <|> pure (as + bs)
-    exponent :: (Ord e) => Double -> P.ParsecT e Text m Double
-    exponent as = do
+      scinot (as + bs) <|> pure (as + bs)
+    scinot :: (Ord e) => Double -> P.ParsecT e Text m Double
+    scinot as = do
       _  <- P.oneOf ['e', 'E']
       op <- asum [(*) <$ P.C.char '+', (/) <$ P.C.char '-', pure (*)]
       digits <- some P.C.digitChar
-      let exp = fromIntegral (foldl' (\i x -> i * 10 + val x) 0 digits)
-      pure $! as `op` (10.0 ^ exp)
+      let expn = foldl' (\i x -> i * 10 + val x) 0 digits
+      pure $! as `op` (10 ^ expn)
 
 custom' :: Ord e => Parser m e x (Text, x)
 custom' = prefixParser '{' $ \(CustomParser c) -> c <* symbol "}"

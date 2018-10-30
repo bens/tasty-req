@@ -70,7 +70,7 @@ verify = goValue []
       -> Validation [Mismatch] [Json.Value Void]
     goArray path p_xs xs =
         traverse (\(i, p_x, x) -> goValue (fromString (show i):path) p_x x)
-          (zip3 [0..] p_xs xs)
+          (zip3 [(0::Int)..] p_xs xs)
 
     goWildcard
       :: [Text]
@@ -78,7 +78,6 @@ verify = goValue []
       -> Json.Value Void
       -> Validation [Mismatch] (Json.Value Void)
     goWildcard _     TyString    x@JsonText   {}  = pure x
-    goWildcard _     TyInteger   x@JsonInteger{}  = pure x
     goWildcard _     TyInteger   x@JsonInteger{}  = pure x
     goWildcard _     TyDouble    x@JsonDouble {}  = pure x
     goWildcard _     TyDouble     (JsonInteger n) = pure (JsonDouble (fromIntegral n))

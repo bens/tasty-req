@@ -8,7 +8,7 @@ import Control.Exception              (SomeException, try)
 import Data.Functor.Identity          (Identity)
 import Data.Text                      (Text)
 import Data.Void                      (Void)
-import Text.Show.Pretty               (ppShow, parseValue)
+import Text.Show.Pretty               (ppShow)
 
 import qualified Data.Text.IO         as Text
 import qualified Network.HTTP.Req     as Req

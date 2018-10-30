@@ -12,7 +12,7 @@ module Test.Tasty.Req.Runner
   ) where
 
 import Control.Monad.Except            (MonadError(..))
-import Control.Monad.IO.Class          (MonadIO(liftIO))
+import Control.Monad.IO.Class          (MonadIO)
 import Control.Monad.State             (MonadState(..), gets, modify)
 import Control.Monad.Trans.Class       (MonadTrans(lift))
 import Control.Monad.Trans.Either      (EitherT, left, runEitherT)
@@ -29,7 +29,6 @@ import Data.Validation                 (Validation(Success, Failure))
 
 import qualified Data.ByteString.Char8 as BS.C
 import qualified Data.Map              as Map
-import qualified Data.Text             as Text
 import qualified Data.Text.Encoding    as Text
 import qualified Network.HTTP.Req      as Req
 import qualified Text.Megaparsec       as P
@@ -108,8 +107,8 @@ runCommand' urlPrefix cmd = do
 buildUrl :: Text -> [Either Ref Text] -> M (Req.Url 'Req.Http, Req.Option schema)
 buildUrl urlPrefix urlParts = do
   let f url [] = pure url
-      f url (Right x:xs) = f (url <> x) xs
-      f url (Left ref@(Ref i side path):xs) = deref ref >>= \case
+      f url (Right x:xs)  = f (url <> x) xs
+      f url (Left ref:xs) = deref ref >>= \case
         Json.JsonNull      -> f (url <> "null") xs
         Json.JsonTrue      -> f (url <> "true") xs
         Json.JsonFalse     -> f (url <> "false") xs
@@ -117,9 +116,9 @@ buildUrl urlPrefix urlParts = do
         Json.JsonInteger n -> f (url <> fromString (show n)) xs
         Json.JsonDouble  n -> f (url <> fromString (show n)) xs
         x                  -> throwError (NonUrlReference x)
-  url <- f urlPrefix urlParts
-  case Req.parseUrlHttp (Text.encodeUtf8 url) of
-    Nothing -> throwError (NoUrlParse url)
+  urlText <- f urlPrefix urlParts
+  case Req.parseUrlHttp (Text.encodeUtf8 urlText) of
+    Nothing -> throwError (NoUrlParse urlText)
     Just (url, opts) -> pure (url, opts)
 
 buildRequestBody :: Int -> [Json.Value Ref] -> M (Json.Value Void)
@@ -131,7 +130,7 @@ parseResponse :: Command -> Req.BsResponse -> M (Maybe (Json.Value Void))
 parseResponse cmd resp = case command'response_body cmd of
   [] | BS.C.null (Req.responseBody resp) -> pure Nothing
      | otherwise -> throwError undefined
-  xs -> either (throwError . JsonParseFailure) (pure . Just) $ P.parse parser "" respText
+  _ -> either (throwError . JsonParseFailure) (pure . Just) $ P.parse parser "" respText
   where
     parser   = Json.runParser Json.value :: P.ParsecT Void Text Identity (Json.Value Void)
     respText = Text.decodeUtf8 $ Req.responseBody resp
@@ -154,14 +153,14 @@ resolveRefs f xs = fold <$> (traverse (Json.substitute resolve) xs >>= mapM extr
       _                 -> throwError NonObjectTopLevel
 
 deref :: Ref -> M (Json.Value Void)
-deref ref@(Ref i side path) = do
+deref ref@(Ref i side path0) = do
   m <- gets (Map.lookup (i, side))
   case m of
     Nothing -> throwError (BadReference ref)
-    Just x -> go path x
+    Just x -> go path0 x
       where
         go [] o = pure o
-        go (x:xs) (Json.JsonObject (Json.Object o)) = case Map.lookup x o of
-          Just o' -> go xs o'
+        go (path:paths) (Json.JsonObject (Json.Object o)) = case Map.lookup path o of
+          Just o' -> go paths o'
           Nothing -> throwError undefined
-        go (x:xs) _ = throwError undefined
+        go (_path:_paths) _ = throwError undefined

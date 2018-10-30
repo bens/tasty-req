@@ -9,12 +9,12 @@ module Test.Tasty.Req.Parse.Common
   ) where
 
 import Control.Applicative
-import Control.Monad (unless)
-import Data.List.NonEmpty (NonEmpty((:|)))
-import Data.Text (Text)
+import Control.Monad                        (unless)
+import Data.List.NonEmpty                   (NonEmpty((:|)))
+import Data.Text                            (Text)
 
-import qualified Text.Megaparsec as P
-import qualified Text.Megaparsec.Char as P.C
+import qualified Text.Megaparsec            as P
+import qualified Text.Megaparsec.Char       as P.C
 import qualified Text.Megaparsec.Char.Lexer as P.L
 
 hspace :: Ord e => P.ParsecT e Text m ()
