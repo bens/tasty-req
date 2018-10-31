@@ -1,8 +1,11 @@
 1: GET /
 ---
-{ "a": {:t integer},
-  "b": {:t double},
-  "c": {:t string},
-  "d": {:t boolean},
-  "e": {:t maybe string},
+{ "a": {:t any},
+  "b": {:t integer},
+  "c": {:t double},
+  "d": {:t string},
+  "e": {:t boolean},
+  "f": {:t object},
+  "g": {:t array},
+  "h": {:t maybe string},
   }

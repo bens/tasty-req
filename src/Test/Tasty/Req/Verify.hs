@@ -80,12 +80,15 @@ verify = goValue []
       -> TypeDefn
       -> Json.Value VoidF Void
       -> Validation [Mismatch] (Json.Value VoidF Void)
+    goWildcard _     TyAny       x                = pure x
     goWildcard _     TyString    x@JsonText   {}  = pure x
     goWildcard _     TyInteger   x@JsonInteger{}  = pure x
     goWildcard _     TyDouble    x@JsonDouble {}  = pure x
     goWildcard _     TyDouble     (JsonInteger n) = pure (JsonDouble (fromIntegral n))
     goWildcard _     TyBool      x@JsonTrue       = pure x
     goWildcard _     TyBool      x@JsonFalse      = pure x
+    goWildcard _     TyObject    x@JsonObject{}   = pure x
+    goWildcard _     TyArray     x@JsonArray{}    = pure x
     goWildcard _    (TyMaybe  _) x@JsonNull       = pure x
     goWildcard path (TyMaybe ty) x                = goWildcard path ty x
     goWildcard path          ty  x                = Failure [WrongType path ty x]

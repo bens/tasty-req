@@ -51,10 +51,13 @@ data Side
     deriving (Eq, Ord, Show)
 
 data TypeDefn
-  = TyString
+  = TyAny
+  | TyString
   | TyInteger
   | TyDouble
   | TyBool
+  | TyObject
+  | TyArray
   | TyMaybe TypeDefn
     deriving (Eq, Ord, Show)
 

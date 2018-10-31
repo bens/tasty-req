@@ -39,10 +39,13 @@ pTypeDefn :: Ord e => P.ParsecT e Text m TypeDefn
 pTypeDefn = term <|> (TyMaybe <$> (symbolH "maybe" *> term))
   where
     term = asum
-      [ TyString  <$ symbolH "string"
+      [ TyAny     <$ symbolH "any"
+      , TyString  <$ symbolH "string"
       , TyInteger <$ symbolH "integer"
       , TyDouble  <$ symbolH "double"
       , TyBool    <$ symbolH "boolean"
+      , TyObject  <$ symbolH "object"
+      , TyArray   <$ symbolH "array"
       ]
 
 -- COMMAND

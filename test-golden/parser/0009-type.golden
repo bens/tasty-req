@@ -9,11 +9,14 @@
           (JsonObject
              (Object
                 (fromList
-                   [ ( "a" , JsonCustom "t" (Right TyInteger) )
-                   , ( "b" , JsonCustom "t" (Right TyDouble) )
-                   , ( "c" , JsonCustom "t" (Right TyString) )
-                   , ( "d" , JsonCustom "t" (Right TyBool) )
-                   , ( "e" , JsonCustom "t" (Right (TyMaybe TyString)) )
+                   [ ( "a" , JsonCustom "t" (Right TyAny) )
+                   , ( "b" , JsonCustom "t" (Right TyInteger) )
+                   , ( "c" , JsonCustom "t" (Right TyDouble) )
+                   , ( "d" , JsonCustom "t" (Right TyString) )
+                   , ( "e" , JsonCustom "t" (Right TyBool) )
+                   , ( "f" , JsonCustom "t" (Right TyObject) )
+                   , ( "g" , JsonCustom "t" (Right TyArray) )
+                   , ( "h" , JsonCustom "t" (Right (TyMaybe TyString)) )
                    ])))
     }
 ]
