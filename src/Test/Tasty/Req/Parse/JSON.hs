@@ -1,32 +1,36 @@
-{-# LANGUAGE DeriveFunctor     #-}
-{-# LANGUAGE DeriveFoldable    #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE DeriveFunctor      #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE LambdaCase         #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE RankNTypes         #-}
+{-# LANGUAGE TupleSections      #-}
 
 module Test.Tasty.Req.Parse.JSON
   ( -- * JSON Values
-    Value(..), ppValue, substitute, discardCustom
+    Value(..), ppValue, substitute
     -- * JSON Objects
   , Object(..), getObject, ppObject
   -- * Parsers
   , Parser, runParser
   -- * Custom Parsers
   , CustomParser, customParsers, emptyCustom, withCustom
+  -- * Combiners
+  , Combine, combineList, combineVoidF, injectVoidF, elimCombine
   -- * JsonValue parsers
   , value
-  , object, array, text, number, atom, custom
+  , object, array, text, number, atom, combine, custom
   -- * Type-specific parsers
-  , object', array', text', number', custom'
+  , object', array', text', integer', number', combine', custom'
   ) where
 
 import Control.Applicative
-import Control.Monad                  (void)
+import Control.Monad                  (foldM)
 import Data.Char                      (chr, isDigit, isHexDigit, isLower, isUpper, ord)
-import Data.Foldable                  (asum)
+import Data.Foldable                  (asum, toList)
 import Data.List                      (foldl', intersperse)
+import Data.List.NonEmpty             (NonEmpty((:|)))
 import Data.Map                       (Map)
+import Data.Semigroup                 (sconcat)
 import Data.Text                      (Text)
 
 import qualified Data.Map             as Map
@@ -36,74 +40,15 @@ import qualified Text.Megaparsec.Char as P.C
 import qualified Text.PrettyPrint     as PP
 
 import Test.Tasty.Req.Parse.Common
+import Test.Tasty.Req.Types
 
-newtype CustomParser m e x = CustomParser (P.ParsecT e Text m (Text, x))
 
-emptyCustom :: Ord e => CustomParser m e x
-emptyCustom = customParsers []
+-- JSON VALUES
 
-customParsers :: Ord e => [(Text, P.ParsecT e Text m x)] -> CustomParser m e x
-customParsers ps = CustomParser $
-  asum [(ty,) <$> (symbol (":" <> ty) *> psr) | (ty, psr) <- ps]
-
-data Value a
-  = JsonNull
-  | JsonTrue
-  | JsonFalse
-  | JsonText Text
-  | JsonInteger Int
-  | JsonDouble Double
-  | JsonObject (Object a)
-  | JsonArray [Value a]
-  | JsonCustom Text a
-    deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
-
-discardCustom :: Value a -> Value ()
-discardCustom = void
-
-newtype Object a
-  = Object (Map Text (Value a))
-    deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
-
-getObject :: Object a -> Map Text (Value a)
-getObject (Object x) = x
-
-instance Semigroup (Object a) where
-  Object a <> Object b = Object (a <> b)
-
-instance Monoid (Object a) where
-  mempty = Object mempty
-  mappend = (<>)
-
-ppValue :: (a -> PP.Doc) -> Value a -> PP.Doc
-ppValue f = \case
-  JsonNull        -> PP.text "null"
-  JsonTrue        -> PP.text "true"
-  JsonFalse       -> PP.text "false"
-  JsonText x      -> PP.text (show x)
-  JsonInteger n   -> PP.text (show n)
-  JsonDouble n    -> PP.text (show n)
-  JsonObject o    -> ppObject f o
-  JsonArray xs    -> ppArray f xs
-  JsonCustom nm x -> PP.braces $ (PP.colon <> PP.text (Text.unpack nm)) PP.<+> f x
-
-ppObject :: (a -> PP.Doc) -> Object a -> PP.Doc
-ppObject f (Object m) =
-  PP.braces (PP.nest 2 (foldr (.) id (addCommas fields) mempty))
-  where
-    fields    = map (uncurry go) (Map.toList m)
-    go k v    = (PP.$$ ((PP.text (show k) <> PP.colon) PP.<+> ppValue f v))
-    addCommas = intersperse (<> PP.comma)
-
-ppArray :: (a -> PP.Doc) -> [Value a] -> PP.Doc
-ppArray f xs =
-  PP.brackets (PP.nest 2 (foldr (.) id (addCommas items) mempty))
-  where
-    items     = map go xs
-    go x      = (ppValue f x PP.$$)
-    addCommas = intersperse (<> PP.comma)
-
-substitute :: Monad m => (Text -> a -> m (Value b)) -> Value a -> m (Value b)
+substitute
+  :: (Monad m, Traversable f)
+  => (Text -> a -> m (Value f b))
+  -> Value f a -> m (Value f b)
 substitute f = \case
   JsonNull              -> pure JsonNull
   JsonTrue              -> pure JsonTrue
@@ -113,88 +58,203 @@ substitute f = \case
   JsonDouble x          -> pure (JsonDouble x)
   JsonObject (Object o) -> JsonObject . Object <$> traverse (substitute f) o
   JsonArray xs          -> JsonArray <$> traverse (substitute f) xs
-  JsonCustom ty x       -> f ty x
+  JsonCombine xs        -> JsonCombine <$> traverse (substitute f) xs
+  JsonCustom nm x       -> f nm x
 
-data Parser m e x a
+ppValue :: (a -> PP.Doc) -> Value f a -> PP.Doc
+ppValue f = \case
+  JsonNull        -> PP.text "null"
+  JsonTrue        -> PP.text "true"
+  JsonFalse       -> PP.text "false"
+  JsonText x      -> PP.text (show x)
+  JsonInteger n   -> PP.text (show n)
+  JsonDouble n    -> PP.text (show n)
+  JsonObject o    -> ppObject f o
+  JsonArray xs    -> ppArray f xs
+  JsonCombine _xs -> error "TODO"
+  JsonCustom nm x -> PP.braces $ (PP.colon <> PP.text (Text.unpack nm)) PP.<+> f x
+
+ppArray :: (a -> PP.Doc) -> [Value f a] -> PP.Doc
+ppArray f xs =
+  PP.brackets (PP.nest 2 (foldr (.) id (addCommas items) mempty))
+  where
+    items     = map go xs
+    go x      = (ppValue f x PP.$$)
+    addCommas = intersperse (<> PP.comma)
+
+
+-- JSON OBJECT
+
+getObject :: Object f a -> Map Text (Value f a)
+getObject (Object x) = x
+
+ppObject :: (a -> PP.Doc) -> Object f a -> PP.Doc
+ppObject f (Object m) =
+  PP.braces (PP.nest 2 (foldr (.) id (addCommas fields) mempty))
+  where
+    fields    = map (uncurry go) (Map.toList m)
+    go k v    = (PP.$$ ((PP.text (show k) <> PP.colon) PP.<+> ppValue f v))
+    addCommas = intersperse (<> PP.comma)
+
+
+-- PARSER
+
+data Parser m e f x a
   = Parser
-      (Map Char [CustomParser m e x -> P.ParsecT e Text m a])
-      (CustomParser m e x -> P.ParsecT e Text m a)
+      (Map Char [CustomParser m e x -> Combine f -> P.ParsecT e Text m a])
+      (CustomParser m e x -> Combine f -> P.ParsecT e Text m a)
     deriving Functor
 
-instance Ord e => Semigroup (Parser m e x a) where
-  Parser a x <> Parser b y = Parser (Map.unionWith (++) a b) (\c -> x c <|> y c)
+instance Ord e => Semigroup (Parser m e f x a) where
+  Parser a x <> Parser b y = Parser (Map.unionWith (++) a b) (\c d -> x c d <|> y c d)
 
-instance Ord e => Monoid (Parser m e x a) where
-  mempty = Parser Map.empty (const empty)
+instance Ord e => Monoid (Parser m e f x a) where
+  mempty = Parser Map.empty (\_ _ -> empty)
   mappend = (<>)
 
-runParser :: Ord e => Parser m e x a -> P.ParsecT e Text m a
+runParser :: Ord e => Combine f -> Parser m e f x a -> P.ParsecT e Text m a
 runParser = runParser' emptyCustom
 
-runParser' :: Ord e => CustomParser m e x -> Parser m e x a -> P.ParsecT e Text m a
-runParser' c (Parser ms p) =
-  (lexeme (P.oneOf (Map.keys ms)) >>= \x -> asum (map ($ c) (ms Map.! x))) <|> p c
-
-withCustom :: CustomParser m e x -> Parser m e x a -> Parser m e x a
-withCustom c (Parser x y) = Parser (fmap (map (\k _ -> k c)) x) (\_ -> y c)
+runParser'
+  :: Ord e
+  => CustomParser m e x
+  -> Combine f
+  -> Parser m e f x a -> P.ParsecT e Text m a
+runParser' c d (Parser ms p) =
+  (lexeme (P.oneOf (Map.keys ms)) >>= \x -> asum (map (\f -> f c d) (ms Map.! x))) <|> p c d
 
 prefixParser
   :: Ord e
   => Char
-  -> (CustomParser m e x -> P.ParsecT e Text m a)
-  -> Parser m e x a
-prefixParser c m = Parser (Map.singleton c [m]) (const empty)
+  -> (CustomParser m e x -> Combine f -> P.ParsecT e Text m a)
+  -> Parser m e f x a
+prefixParser c m = Parser (Map.singleton c [m]) (\_ _ -> empty)
 
 otherParser
-  :: (CustomParser m e x -> P.ParsecT e Text m a)
-  -> Parser m e x a
+  :: (CustomParser m e x -> Combine f -> P.ParsecT e Text m a)
+  -> Parser m e f x a
 otherParser = Parser Map.empty
 
 
--- Value Parsers
+-- CUSTOM VALUES
 
-value :: Ord e => Parser m e x (Value x)
-value =
-  mconcat [atom, text, number, object, array, custom]
+newtype CustomParser m e x = CustomParser (P.ParsecT e Text m (Text, x))
 
-object :: Ord e => Parser m e x (Value x)
+emptyCustom :: Ord e => CustomParser m e x
+emptyCustom = customParsers []
+
+customParsers :: Ord e => [(Text, P.ParsecT e Text m x)] -> CustomParser m e x
+customParsers ps = CustomParser $
+  asum [(nm,) <$> (symbol (":" <> nm) *> psr) | (nm, psr) <- ps]
+
+withCustom :: CustomParser m e x -> Parser m e f x a -> Parser m e f x a
+withCustom c (Parser x y) = Parser (fmap (map (\k _ -> k c)) x) (\_ -> y c)
+
+
+-- COMBINERS
+
+data Combine f = Combine (forall a. a -> f a) (forall a. f a -> Maybe a)
+
+combineList :: Combine NonEmpty
+combineList = Combine (:|[]) (\(x:|_) -> Just x)
+
+combineVoidF :: Combine VoidF
+combineVoidF = Combine undefined absurdF
+
+injectVoidF :: Value VoidF a -> Value NonEmpty a
+injectVoidF = \case
+  JsonNull              -> JsonNull
+  JsonTrue              -> JsonTrue
+  JsonFalse             -> JsonFalse
+  JsonText x            -> JsonText x
+  JsonInteger n         -> JsonInteger n
+  JsonDouble n          -> JsonDouble n
+  JsonObject (Object o) -> JsonObject (Object (fmap injectVoidF o))
+  JsonArray xs          -> JsonArray (map injectVoidF xs)
+  JsonCombine xs        -> absurdF xs
+  JsonCustom nm x       -> JsonCustom nm x
+
+elimCombine
+  :: (Monad m, Traversable f)
+  => (Value VoidF a -> Value VoidF a -> m (Value VoidF a))
+  -> Value f a -> m (Value VoidF a)
+elimCombine f = \case
+  JsonNull              -> pure JsonNull
+  JsonTrue              -> pure JsonTrue
+  JsonFalse             -> pure JsonFalse
+  JsonText x            -> pure (JsonText x)
+  JsonInteger x         -> pure (JsonInteger x)
+  JsonDouble x          -> pure (JsonDouble x)
+  JsonObject (Object o) -> JsonObject . Object <$> traverse (elimCombine f) o
+  JsonArray xs          -> JsonArray <$> traverse (elimCombine f) xs
+  JsonCustom nm x       -> pure (JsonCustom nm x)
+  JsonCombine xs -> do
+    ys <- traverse (elimCombine f) xs
+    case toList ys of
+      a:as -> foldM f a as
+      []   -> error "impossible: JsonCombine must be VoidF or NonEmpty"
+
+
+-- VALUE PARSERS
+
+value
+  :: (Ord e, Semigroup (f (Value f x)))
+  => Parser m e f x (Value f x)
+value = mconcat [atom, text, number, array, combine (object <> custom)]
+
+object
+  :: (Ord e, Semigroup (f (Value f x)))
+  => Parser m e f x (Value f x)
 object = JsonObject <$> object'
 
-array :: Ord e => Parser m e x (Value x)
+array
+  :: (Ord e, Semigroup (f (Value f x)))
+  => Parser m e f x (Value f x)
 array = JsonArray <$> array'
 
-text :: Ord e => Parser m e x (Value x)
+text :: Ord e => Parser m e f x (Value f x)
 text = JsonText <$> text'
 
-number :: Ord e => Parser m e x (Value x)
+number :: Ord e => Parser m e f x (Value f x)
 number = either JsonInteger JsonDouble <$> number'
 
-atom :: Ord e => Parser m e x (Value x)
+atom :: Ord e => Parser m e f x (Value f x)
 atom = mconcat
-  [ otherParser (const (JsonNull  <$ symbol "null"))
-  , otherParser (const (JsonTrue  <$ symbol "true"))
-  , otherParser (const (JsonFalse <$ symbol "false"))
+  [ otherParser (\_ _ -> (JsonNull  <$ symbol "null"))
+  , otherParser (\_ _ -> (JsonTrue  <$ symbol "true"))
+  , otherParser (\_ _ -> (JsonFalse <$ symbol "false"))
   ]
 
-custom :: Ord e => Parser m e x (Value x)
+combine
+  :: (Ord e, Semigroup (f (Value f x)))
+  => Parser m e f x (Value f x)
+  -> Parser m e f x (Value f x)
+combine ps = otherParser $ \c d ->
+  runParser' c d (combine' ps) >>= either pure (pure . JsonCombine)
+
+custom :: Ord e => Parser m e f x (Value f x)
 custom = uncurry JsonCustom <$> custom'
 
 
--- Typeful Parsers
+-- TYPEFUL PARSERS
 
-object' :: Ord e => Parser m e x (Object x)
-object' = prefixParser '{' $ \c -> do
+object'
+  :: (Ord e, Semigroup (f (Value f x)))
+  => Parser m e f x (Object f x)
+object' = prefixParser '{' $ \c d -> do
   obj <- flip P.sepEndBy (symbol ",") $
-    (,) <$> (lexeme (runParser' c text') <* symbol ":")
-        <*> lexeme (runParser' c value)
+    (,) <$> (lexeme (runParser' c d text') <* symbol ":")
+        <*> lexeme (runParser' c d value)
   Object (Map.fromList obj) <$ symbol "}"
 
-array' :: Ord e => Parser m e x [Value x]
-array' = prefixParser '[' $ \c ->
-  P.sepBy (lexeme (runParser' c value)) (symbol ",") <* symbol "]"
+array'
+  :: (Ord e, Semigroup (f (Value f x)))
+  => Parser m e f x [Value f x]
+array' = prefixParser '[' $ \c d ->
+  P.sepBy (lexeme (runParser' c d value)) (symbol ",") <* symbol "]"
 
-text' :: Ord e => Parser m e x Text
-text' = otherParser $ \_ -> P.label "string literal" $ P.C.char '"' *> go id
+text' :: Ord e => Parser m e f x Text
+text' = otherParser $ \_ _ -> P.label "string literal" $ P.C.char '"' *> go id
   where
     go :: Ord e => (Text -> Text) -> P.ParsecT e Text m Text
     go k = do
@@ -214,20 +274,32 @@ text' = otherParser $ \_ -> P.label "string literal" $ P.C.char '"' *> go id
             Just n  -> go (k . (xs <>) . (Text.pack [chr n] <>))
             Nothing -> fail "failed to parse hex bytes"
           c -> fail ("bad character code: '\\" ++ [c] ++ "'")
-        _ -> error "impossible"
+        _ -> error "impossible: notElem"
 
-number' :: Ord e => Parser m e x (Either Int Double)
-number' = otherParser $ \_ -> P.label "number" $ do
+pInteger :: Ord e => P.ParsecT e Text m (Bool, Int)
+pInteger = do
   neg <- (True <$ P.C.char '-') <|> pure False
   as <- integer <|> (0 <$ P.C.char '0')
-  (Right . (if neg then negate else id) <$> double (fromIntegral as)) <|>
-    pure (Left ((if neg then negate else id) as))
+  pure (neg, as)
   where
     val x = ord x - 48
     integer :: (Ord e) => P.ParsecT e Text m Int
     integer = do
       digits <- (:) <$> P.oneOf ['1'..'9'] <*> many P.C.digitChar
       pure $! foldl' (\i x -> i * 10 + val x) 0 digits
+
+integer' :: Ord e => Parser m e f x Int
+integer' = otherParser $ \_ _ -> P.label "integer" $ do
+  (neg, n) <- pInteger
+  pure $ (if neg then negate else id) n
+
+number' :: Ord e => Parser m e f x (Either Int Double)
+number' = otherParser $ \_ _ -> P.label "number" $ do
+  (neg, as) <- pInteger
+  (Right . (if neg then negate else id) <$> double (fromIntegral as)) <|>
+    pure (Left ((if neg then negate else id) as))
+  where
+    val x = ord x - 48
     double :: (Ord e) => Double -> P.ParsecT e Text m Double
     double as = decimals as <|> scinot as
     decimals :: (Ord e) => Double -> P.ParsecT e Text m Double
@@ -243,8 +315,19 @@ number' = otherParser $ \_ -> P.label "number" $ do
       let expn = foldl' (\i x -> i * 10 + val x) 0 digits
       pure $! as `op` (10 ^ expn)
 
-custom' :: Ord e => Parser m e x (Text, x)
-custom' = prefixParser '{' $ \(CustomParser c) -> c <* symbol "}"
+combine'
+  :: (Ord e, Semigroup (f a))
+  => Parser m e f x a -> Parser m e f x (Either a (f a))
+combine' p = otherParser $ \c d -> do
+  let Combine inj _ = d
+  xs <- P.sepBy1 (runParser' c d p) (symbol "<>")
+  case xs of
+    []   -> error "impossible: sepBy1"
+    [y]  -> pure (Left y)
+    y:ys -> pure (Right (sconcat (fmap inj (y :| ys))))
+
+custom' :: Ord e => Parser m e f x (Text, x)
+custom' = prefixParser '{' $ \(CustomParser c) _ -> c <* symbol "}"
 
 
 -- Helpers

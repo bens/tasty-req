@@ -4,13 +4,16 @@
     , command'method = "POST"
     , command'url = [ Right "/" ]
     , command'request_body =
-        [ JsonObject (Object (fromList [ ( "a" , JsonInteger 0 ) ])) ]
+        Just (JsonObject (Object (fromList [ ( "a" , JsonInteger 0 ) ])))
     , command'response_body =
-        [ JsonCustom "r" (Left (Ref 1 Response []))
-        , JsonObject
-            (Object
-               (fromList
-                  [ ( "b" , JsonCustom "r" (Left (Ref 1 Response [ "a" ])) ) ]))
-        ]
+        Just
+          (JsonCombine
+             (JsonCustom "r" (Left (Ref 1 Response [])) :|
+                [ JsonObject
+                    (Object
+                       (fromList
+                          [ ( "b" , JsonCustom "r" (Left (Ref 1 Response [ Right "a" ])) )
+                          ]))
+                ]))
     }
 ]

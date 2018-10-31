@@ -8,7 +8,6 @@ module Test.Tasty.Req.Parse
 import Control.Applicative                  ((<|>), many, optional, some)
 import Data.Char                            (isAlphaNum, isUpper)
 import Data.Foldable                        (asum)
-import Data.Maybe                           (fromMaybe)
 import Data.Text                            (Text)
 
 import qualified Text.Megaparsec            as P
@@ -28,7 +27,10 @@ pRef :: Ord e => P.ParsecT e Text m Ref
 pRef = do
   r <- lexemeH P.L.decimal
   side <- (Request <$ P.C.char '?') <|> (Response <$ P.C.char '!')
-  path <- many $ P.between (P.C.char '[') (P.C.char ']') (Json.runParser Json.text')
+  path <- many $ P.between (P.C.char '[') (P.C.char ']') $
+    P.eitherP
+      (Json.runParser Json.combineVoidF Json.integer')  -- array index
+      (Json.runParser Json.combineVoidF Json.text')     -- object key
   pure (Ref r side path)
 
 -- TYPE DEFN
@@ -59,17 +61,26 @@ pUrl = lexemeH (some pSegment)
 
 pCommand :: Ord e => P.ParsecT e Text m Command
 pCommand = do
-  let requestPsr = Json.runParser $
-        Json.withCustom (Json.customParsers [("r", pRef)]) Json.object <>
-        Json.withCustom (Json.customParsers [("r", pRef)]) Json.custom
-      expectedPsr = Json.runParser $
-        Json.withCustom (Json.customParsers [("r", Left <$> pRef), ("t", Right <$> pTypeDefn)]) Json.object <>
-        Json.withCustom (Json.customParsers [("r", Left <$> pRef)]) Json.custom
+  let requestPsr = Json.runParser Json.combineList $
+        let custom = [("r", pRef)]
+        in Json.combine
+           ( Json.withCustom (Json.customParsers custom) Json.object <>
+             Json.withCustom (Json.customParsers custom) Json.custom
+           ) <>
+           Json.withCustom (Json.customParsers custom) Json.array
+      expectedPsr = Json.runParser Json.combineList $
+        let customA = [("r", Left <$> pRef), ("t", Right <$> pTypeDefn)]
+            customB = [("r", Left <$> pRef)]
+        in Json.combine
+           ( Json.withCustom (Json.customParsers customA) Json.object <>
+             Json.withCustom (Json.customParsers customB) Json.custom
+           ) <>
+           Json.withCustom (Json.customParsers customA) Json.array
   n       <- ensure1stCol *> P.L.decimal
   always  <- ((True <$ P.C.char '*') <|> pure False) <* symbolH ":"
   method  <- pMethod
   url     <- pUrl <* hspace <* P.C.newline
-  request <- optional (P.sepBy1 requestPsr (symbol "<>"))
+  request <- optional requestPsr
   spaces *> ensure1stCol *> symbol "---"
-  expected <- P.sepBy expectedPsr (symbol "<>")
-  pure (Command n always method url (fromMaybe [] request) expected)
+  expected <- optional expectedPsr
+  pure (Command n always method url request expected)

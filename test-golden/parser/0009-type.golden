@@ -3,17 +3,17 @@
     , command'always = False
     , command'method = "GET"
     , command'url = [ Right "/" ]
-    , command'request_body = []
+    , command'request_body = Nothing
     , command'response_body =
-        [ JsonObject
-            (Object
-               (fromList
-                  [ ( "a" , JsonCustom "t" (Right TyInteger) )
-                  , ( "b" , JsonCustom "t" (Right TyDouble) )
-                  , ( "c" , JsonCustom "t" (Right TyString) )
-                  , ( "d" , JsonCustom "t" (Right TyBool) )
-                  , ( "e" , JsonCustom "t" (Right (TyMaybe TyString)) )
-                  ]))
-        ]
+        Just
+          (JsonObject
+             (Object
+                (fromList
+                   [ ( "a" , JsonCustom "t" (Right TyInteger) )
+                   , ( "b" , JsonCustom "t" (Right TyDouble) )
+                   , ( "c" , JsonCustom "t" (Right TyString) )
+                   , ( "d" , JsonCustom "t" (Right TyBool) )
+                   , ( "e" , JsonCustom "t" (Right (TyMaybe TyString)) )
+                   ])))
     }
 ]

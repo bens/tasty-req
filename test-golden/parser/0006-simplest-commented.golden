@@ -3,7 +3,7 @@
     , command'always = False
     , command'method = "GET"
     , command'url = [ Right "/" ]
-    , command'request_body = []
-    , command'response_body = [ JsonObject (Object (fromList [])) ]
+    , command'request_body = Nothing
+    , command'response_body = Just (JsonObject (Object (fromList [])))
     }
 ]

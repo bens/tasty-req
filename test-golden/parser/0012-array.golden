@@ -1,0 +1,36 @@
+[ Command
+    { command'id = 1
+    , command'always = False
+    , command'method = "GET"
+    , command'url = [ Right "/" ]
+    , command'request_body =
+        Just
+          (JsonArray
+             [ JsonObject (Object (fromList [ ( "foo" , JsonInteger 123 ) ]))
+             , JsonObject
+                 (Object
+                    (fromList
+                       [ ( "bar"
+                         , JsonObject (Object (fromList [ ( "abc" , JsonNull ) ]))
+                         )
+                       ]))
+             ])
+    , command'response_body =
+        Just
+          (JsonArray
+             [ JsonObject
+                 (Object
+                    (fromList
+                       [ ( "bib"
+                         , JsonCombine
+                             (JsonCustom "r" (Left (Ref 1 Request [ Left 0 ])) :|
+                                [ JsonObject (Object (fromList [ ( "uff" , JsonInteger 987 ) ])) ])
+                         )
+                       , ( "bob"
+                         , JsonCustom
+                             "r" (Left (Ref 1 Request [ Left 1 , Right "bar" , Right "abc" ]))
+                         )
+                       ]))
+             ])
+    }
+]

@@ -6,6 +6,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 
 module Test.Tasty.Req.Runner
   ( Error(..), runCommands
@@ -19,13 +20,13 @@ import Control.Monad.Trans.Either      (EitherT, left, runEitherT)
 import Control.Monad.Trans.Reader      (ReaderT, ask, runReaderT)
 import Control.Monad.Trans.State       (StateT, evalStateT)
 import Data.Default                    (def)
-import Data.Foldable                   (fold)
 import Data.Functor.Identity           (Identity)
+import Data.List.NonEmpty              (NonEmpty)
 import Data.Map                        (Map)
 import Data.String                     (fromString)
 import Data.Text                       (Text)
-import Data.Void                       (Void, absurd)
 import Data.Validation                 (Validation(Success, Failure))
+import Data.Void                       (Void, absurd)
 
 import qualified Data.ByteString.Char8 as BS.C
 import qualified Data.Map              as Map
@@ -34,7 +35,7 @@ import qualified Network.HTTP.Req      as Req
 import qualified Text.Megaparsec       as P
 import qualified Text.PrettyPrint      as PP
 
-import Test.Tasty.Req.Types            (Command(..), Ref(..), Side(..), TypeDefn(..))
+import Test.Tasty.Req.Types            (Command(..), Ref(..), Side(..), TypeDefn(..), VoidF)
 import Test.Tasty.Req.Verify           (Mismatch(..), verify)
 
 import qualified Test.Tasty.Req.Parse.JSON as Json
@@ -47,11 +48,11 @@ data Error
   | BadReference Ref
   | JsonParseFailure (P.ParseErrorBundle Text Void)
   | VerifyFailed [Mismatch]
-  | NonUrlReference (Json.Value Void)
-    deriving (Show)
+  | NonUrlReference (Json.Value VoidF Void)
+    deriving Show
 
 newtype M a =
-  M (StateT (Map (Int, Side) (Json.Value Void))
+  M (StateT (Map (Int, Side) (Json.Value VoidF Void))
        (EitherT Error
           (ReaderT Req.HttpConfig IO)) a)
   deriving (Functor, Applicative, Monad, MonadIO)
@@ -60,7 +61,7 @@ instance MonadError Error M where
   throwError e = M (lift (throwError e))
   catchError (M m) h = M $ catchError m $ \err -> case h err of M m' -> m'
 
-instance MonadState (Map (Int, Side) (Json.Value Void)) M where
+instance MonadState (Map (Int, Side) (Json.Value VoidF Void)) M where
   state = M . state
 
 instance Req.MonadHttp M where
@@ -77,30 +78,24 @@ runCommand' :: Text -> Command -> M ()
 runCommand' urlPrefix cmd = do
   (url, opts) <- buildUrl urlPrefix (command'url cmd)
   case command'method cmd of
-    "GET" -> do
-      resp <- Req.req Req.GET url Req.NoReqBody Req.bsResponse opts >>= parseResponse cmd
-      case resp of
-        Just r -> verifyResponse (command'id cmd) (command'response_body cmd) r
-        Nothing -> pure ()
+    "GET" ->
+      Req.req Req.GET url Req.NoReqBody Req.bsResponse opts
+        >>= parseResponse
+        >>= verifyResponse (command'id cmd) (command'response_body cmd)
     "POST" -> do
-      reqObj <- buildRequestBody (command'id cmd) (command'request_body cmd)
-      let reqBody = Req.ReqBodyBs (BS.C.pack (PP.render (Json.ppValue absurd reqObj)))
-      resp <- Req.req Req.POST url reqBody Req.bsResponse opts >>= parseResponse cmd
-      case resp of
-        Just r -> verifyResponse (command'id cmd) (command'response_body cmd) r
-        Nothing -> pure ()
+      reqBody <- buildRequestBody (command'id cmd) (command'request_body cmd)
+      Req.req Req.POST url reqBody Req.bsResponse opts
+        >>= parseResponse
+        >>= verifyResponse (command'id cmd) (command'response_body cmd)
     "PUT" -> do
-      reqObj <- buildRequestBody (command'id cmd) (command'request_body cmd)
-      let reqBody = Req.ReqBodyBs (BS.C.pack (PP.render (Json.ppValue absurd reqObj)))
-      resp <- Req.req Req.PUT url reqBody Req.bsResponse opts >>= parseResponse cmd
-      case resp of
-        Just r -> verifyResponse (command'id cmd) (command'response_body cmd) r
-        Nothing -> pure ()
-    "DELETE" -> do
-      resp <- Req.req Req.DELETE url Req.NoReqBody Req.bsResponse opts >>= parseResponse cmd
-      case resp of
-        Just r -> verifyResponse (command'id cmd) (command'response_body cmd) r
-        Nothing -> pure ()
+      reqBody <- buildRequestBody (command'id cmd) (command'request_body cmd)
+      Req.req Req.PUT url reqBody Req.bsResponse opts
+        >>= parseResponse
+        >>= verifyResponse (command'id cmd) (command'response_body cmd)
+    "DELETE" ->
+      Req.req Req.DELETE url Req.NoReqBody Req.bsResponse opts
+        >>= parseResponse
+        >>= verifyResponse (command'id cmd) (command'response_body cmd)
     method ->
       throwError (UnknownMethod method)
 
@@ -121,38 +116,44 @@ buildUrl urlPrefix urlParts = do
     Nothing -> throwError (NoUrlParse urlText)
     Just (url, opts) -> pure (url, opts)
 
-buildRequestBody :: Int -> [Json.Value Ref] -> M (Json.Value Void)
-buildRequestBody i os = do
-  o <- fmap Json.JsonObject (resolveRefs Right os)
-  o <$ modify (Map.insert (i, Request) o)
+buildRequestBody :: Int -> Maybe (Json.Value NonEmpty Ref) -> M Req.ReqBodyBs
+buildRequestBody _ Nothing = pure (Req.ReqBodyBs "")
+buildRequestBody i (Just os) = do
+  o <- resolveRefs Right os >>= squash
+  modify (Map.insert (i, Request) o)
+  pure (Req.ReqBodyBs (BS.C.pack (PP.render (Json.ppValue absurd o))))
 
-parseResponse :: Command -> Req.BsResponse -> M (Maybe (Json.Value Void))
-parseResponse cmd resp = case command'response_body cmd of
-  [] | BS.C.null (Req.responseBody resp) -> pure Nothing
-     | otherwise -> throwError undefined
-  _ -> either (throwError . JsonParseFailure) (pure . Just) $ P.parse parser "" respText
+parseResponse :: Req.BsResponse -> M (Maybe (Json.Value VoidF Void))
+parseResponse resp
+  | BS.C.null (Req.responseBody resp) = pure Nothing
+  | otherwise = either badParse (pure . Just) $ P.parse parser "" respText
   where
-    parser   = Json.runParser Json.value :: P.ParsecT Void Text Identity (Json.Value Void)
+    parser   = Json.runParser Json.combineVoidF Json.value :: P.ParsecT Void Text Identity (Json.Value VoidF Void)
     respText = Text.decodeUtf8 $ Req.responseBody resp
+    badParse = throwError . JsonParseFailure
 
-verifyResponse :: Int -> [Json.Value (Either Ref TypeDefn)] -> Json.Value Void -> M ()
-verifyResponse i expected x = do
-  resolved <- resolveRefs (either Right Left) expected
-  case verify (Json.JsonObject resolved) x of
+verifyResponse
+  :: Int
+  -> Maybe (Json.Value NonEmpty (Either Ref TypeDefn))
+  -> Maybe (Json.Value VoidF Void)
+  -> M ()
+verifyResponse _ Nothing Nothing = pure ()
+verifyResponse i (Just expected) (Just x) = do
+  resolved <- resolveRefs (either Right Left) expected >>= squash
+  case verify resolved x of
     Failure errs -> throwError (VerifyFailed errs)
     Success y    -> modify (Map.insert (i, Response) y)
+verifyResponse _ (Just _) Nothing = throwError undefined
+verifyResponse _ Nothing (Just _) = throwError undefined
 
-resolveRefs :: (a -> Either b Ref) -> [Json.Value a] -> M (Json.Object b)
-resolveRefs f xs = fold <$> (traverse (Json.substitute resolve) xs >>= mapM extract)
+resolveRefs :: (a -> Either b Ref) -> Json.Value NonEmpty a -> M (Json.Value NonEmpty b)
+resolveRefs f = Json.substitute resolve
   where
     resolve nm x = case f x of
       Left y    -> pure (Json.JsonCustom nm y)
-      Right ref -> fmap absurd <$> deref ref
-    extract = \case
-      Json.JsonObject o -> pure o
-      _                 -> throwError NonObjectTopLevel
+      Right ref -> Json.injectVoidF . fmap absurd <$> deref ref
 
-deref :: Ref -> M (Json.Value Void)
+deref :: Ref -> M (Json.Value VoidF Void)
 deref ref@(Ref i side path0) = do
   m <- gets (Map.lookup (i, side))
   case m of
@@ -160,7 +161,16 @@ deref ref@(Ref i side path0) = do
     Just x -> go path0 x
       where
         go [] o = pure o
-        go (path:paths) (Json.JsonObject (Json.Object o)) = case Map.lookup path o of
-          Just o' -> go paths o'
+        go (Left j:path) (Json.JsonArray xs) = case drop j xs of
+          o':_ -> go path o'
+          [] -> throwError undefined
+        go (Right k:path) (Json.JsonObject (Json.Object o)) = case Map.lookup k o of
+          Just o' -> go path o'
           Nothing -> throwError undefined
         go (_path:_paths) _ = throwError undefined
+
+squash :: Traversable f => Json.Value f a -> M (Json.Value VoidF a)
+squash = Json.elimCombine f
+  where
+    f (Json.JsonObject a) (Json.JsonObject b)= pure (Json.JsonObject (a <> b))
+    f _ _ = throwError undefined

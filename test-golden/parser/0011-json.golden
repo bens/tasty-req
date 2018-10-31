@@ -3,26 +3,26 @@
     , command'always = False
     , command'method = "GET"
     , command'url = [ Right "/" ]
-    , command'request_body = []
+    , command'request_body = Nothing
     , command'response_body =
-        [ JsonObject
-            (Object
-               (fromList
-                  [ ( "a" , JsonNull )
-                  , ( "b" , JsonTrue )
-                  , ( "c" , JsonFalse )
-                  , ( "d" , JsonText "foo" )
-                  , ( "e" , JsonText "abc\nxyz\tuvw" )
-                  , ( "f"
-                    , JsonArray [ JsonInteger 1 , JsonInteger 2 , JsonInteger 3 ]
-                    )
-                  , ( "g"
-                    , JsonObject
-                        (Object
-                           (fromList
-                              [ ( "x" , JsonNull ) , ( "y" , JsonTrue ) , ( "z" , JsonFalse ) ]))
-                    )
-                  ]))
-        ]
+        Just
+          (JsonObject
+             (Object
+                (fromList
+                   [ ( "a" , JsonNull )
+                   , ( "b" , JsonTrue )
+                   , ( "c" , JsonFalse )
+                   , ( "d" , JsonText "foo" )
+                   , ( "e" , JsonText "abc\nxyz\tuvw" )
+                   , ( "f"
+                     , JsonArray [ JsonInteger 1 , JsonInteger 2 , JsonInteger 3 ]
+                     )
+                   , ( "g"
+                     , JsonObject
+                         (Object
+                            (fromList
+                               [ ( "x" , JsonNull ) , ( "y" , JsonTrue ) , ( "z" , JsonFalse ) ]))
+                     )
+                   ])))
     }
 ]

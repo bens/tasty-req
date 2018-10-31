@@ -11,26 +11,29 @@ import Data.Void                 (Void)
 
 import qualified Data.Map        as Map
 
-import Test.Tasty.Req.Types      (TypeDefn(..))
+import Test.Tasty.Req.Types      (TypeDefn(..), VoidF)
 import Test.Tasty.Req.Parse.JSON (Value(..), Object(..))
 
 import qualified Test.Tasty.Req.Parse.JSON as Json
 
 data Mismatch
-  = WrongValue    [Text] (Json.Value TypeDefn) (Json.Value Void)
-  | WrongType     [Text] TypeDefn (Json.Value Void)
+  = WrongValue    [Text] (Json.Value VoidF TypeDefn) (Json.Value VoidF Void)
+  | WrongType     [Text] TypeDefn (Json.Value VoidF Void)
   | UnexpectedKey [Text] Text
   | MissingKeys   [Text] [Text]
-    deriving (Eq, Ord, Show)
+    deriving Show
 
-verify :: Json.Value TypeDefn -> Json.Value Void -> Validation [Mismatch] (Json.Value Void)
+verify
+  :: Json.Value VoidF TypeDefn
+  -> Json.Value VoidF Void
+  -> Validation [Mismatch] (Json.Value VoidF Void)
 verify = goValue []
   where
     goValue
       :: [Text]
-      -> Json.Value TypeDefn
-      -> Json.Value Void
-      -> Validation [Mismatch] (Json.Value Void)
+      -> Json.Value VoidF TypeDefn
+      -> Json.Value VoidF Void
+      -> Validation [Mismatch] (Json.Value VoidF Void)
     goValue path pat val = case (pat, val) of
       (JsonNull       , JsonNull      ) -> pure val
       (JsonTrue       , JsonTrue      ) -> pure val
@@ -47,9 +50,9 @@ verify = goValue []
 
     goObject
       :: [Text]
-      -> Json.Object TypeDefn
-      -> Json.Object Void
-      -> Validation [Mismatch] (Json.Object Void)
+      -> Json.Object VoidF TypeDefn
+      -> Json.Object VoidF Void
+      -> Validation [Mismatch] (Json.Object VoidF Void)
     goObject path (Object p_o) (Object o) =
       Object . Map.fromList <$> checked <* missings
       where
@@ -65,9 +68,9 @@ verify = goValue []
 
     goArray
       :: [Text]
-      -> [Json.Value TypeDefn]
-      -> [Json.Value Void]
-      -> Validation [Mismatch] [Json.Value Void]
+      -> [Json.Value VoidF TypeDefn]
+      -> [Json.Value VoidF Void]
+      -> Validation [Mismatch] [Json.Value VoidF Void]
     goArray path p_xs xs =
         traverse (\(i, p_x, x) -> goValue (fromString (show i):path) p_x x)
           (zip3 [(0::Int)..] p_xs xs)
@@ -75,8 +78,8 @@ verify = goValue []
     goWildcard
       :: [Text]
       -> TypeDefn
-      -> Json.Value Void
-      -> Validation [Mismatch] (Json.Value Void)
+      -> Json.Value VoidF Void
+      -> Validation [Mismatch] (Json.Value VoidF Void)
     goWildcard _     TyString    x@JsonText   {}  = pure x
     goWildcard _     TyInteger   x@JsonInteger{}  = pure x
     goWildcard _     TyDouble    x@JsonDouble {}  = pure x
