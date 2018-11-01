@@ -35,7 +35,7 @@ import Control.Applicative
 import Control.Monad                  (foldM)
 import Data.Char                      (chr, isDigit, isHexDigit, isLower, isUpper, ord)
 import Data.Foldable                  (asum, toList)
-import Data.List                      (foldl', intersperse)
+import Data.List                      (foldl', intersperse, sort)
 import Data.List.NonEmpty             (NonEmpty((:|)))
 import Data.Map                       (Map)
 import Data.Maybe                     (fromMaybe)
@@ -253,10 +253,15 @@ object'
   :: (Ord e, Semigroup (f (Value f x)))
   => Parser m e f x (Object f x)
 object' = prefixParser '{' $ \c d -> do
-  obj <- flip P.sepEndBy (symbol ",") $
+  pairs <- flip P.sepEndBy (symbol ",") $
     (,) <$> (lexeme (runParser' c d text') <* symbol ":")
         <*> lexeme (runParser' c d value)
-  Object (Map.fromList obj) <$ symbol "}"
+  let repeats = map fst $
+        let ks = sort (map fst pairs)
+        in filter (uncurry (==)) (zip ks (drop 1 ks))
+  if null repeats
+    then Object (Map.fromList pairs) <$ symbol "}"
+    else fail ("Repeated object keys: " ++ show repeats)
 
 array'
   :: (Ord e, Semigroup (f (Value f x)))

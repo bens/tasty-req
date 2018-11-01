@@ -1,0 +1,5 @@
+test-golden/json-parser/0008-broken-top-level-number.json:1:1:
+  |
+1 | 123.20
+  | ^
+unexpected '1'

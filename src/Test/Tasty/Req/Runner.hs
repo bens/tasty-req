@@ -12,7 +12,7 @@
 {-# LANGUAGE TypeApplications           #-}
 
 module Test.Tasty.Req.Runner
-  ( Error(..), runCommands
+  ( Error(..), runCommands, responseParser
   ) where
 
 import Control.Monad.Except            (MonadError(..))
@@ -139,7 +139,7 @@ buildRequestBody i (Just req) = do
   pure (Req.ReqBodyBs (BS.C.pack (PP.render (Json.ppValue absurd req'))))
 
 responseParser :: P.ParsecT Void Text Identity (Json.Value VoidF Void)
-responseParser = Json.runParser Json.combineVoidF Json.value <* P.eof
+responseParser = Json.runParser Json.combineVoidF (Json.object <> Json.array) <* P.eof
 
 parseResponse :: Req.BsResponse -> M (Maybe (Json.Value VoidF Void))
 parseResponse resp

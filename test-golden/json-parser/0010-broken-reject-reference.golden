@@ -1,0 +1,6 @@
+test-golden/json-parser/0010-broken-reject-reference.json:1:11:
+  |
+1 | { "foo": {:r 1? } }
+  |           ^
+unexpected ':'
+expecting '}' or string literal

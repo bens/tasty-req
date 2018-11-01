@@ -1,0 +1,18 @@
+JsonObject
+  (Object
+     (fromList
+        [ ( "a" , JsonNull )
+        , ( "b" , JsonText "some string" )
+        , ( "c" , JsonInteger 123 )
+        , ( "d" , JsonDouble 0.0 )
+        , ( "e" , JsonDouble 1.0e-3 )
+        , ( "f" , JsonDouble 3.21e9 )
+        , ( "g"
+          , JsonArray [ JsonInteger 1 , JsonDouble 2.0 , JsonText "3" ]
+          )
+        , ( "h"
+          , JsonObject
+              (Object
+                 (fromList [ ( "x" , JsonInteger 1 ) , ( "y" , JsonInteger 2 ) ]))
+          )
+        ]))

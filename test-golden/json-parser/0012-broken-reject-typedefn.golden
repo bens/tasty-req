@@ -1,0 +1,6 @@
+test-golden/json-parser/0012-broken-reject-typedefn.json:1:11:
+  |
+1 | { "foo": {:t string } }
+  |           ^
+unexpected ':'
+expecting '}' or string literal

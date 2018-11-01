@@ -1,0 +1,5 @@
+test-golden/json-parser/0005-broken-top-level-true.json:1:1:
+  |
+1 | true
+  | ^
+unexpected 't'

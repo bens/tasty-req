@@ -4,23 +4,26 @@ module Test.Tasty.Req.Verify
   ( Mismatch(..), verify
   ) where
 
+import Control.Monad             (unless)
 import Data.String               (fromString)
 import Data.Text                 (Text)
+import Data.Traversable          (for)
 import Data.Validation           (Validation(Failure))
 import Data.Void                 (Void, absurd)
 
 import qualified Data.Map        as Map
+import qualified Data.Set        as Set
 
-import Test.Tasty.Req.Types      (TypeDefn(..), VoidF, absurdF)
 import Test.Tasty.Req.Parse.JSON (Value(..), Object(..))
+import Test.Tasty.Req.Types      (TypeDefn(..), VoidF, absurdF)
 
 import qualified Test.Tasty.Req.Parse.JSON as Json
 
 data Mismatch
-  = WrongValue    [Text] (Json.Value VoidF TypeDefn) (Json.Value VoidF Void)
-  | WrongType     [Text] TypeDefn (Json.Value VoidF Void)
-  | UnexpectedKey [Text] Text
-  | MissingKeys   [Text] [Text]
+  = WrongValue     [Text] (Json.Value VoidF TypeDefn) (Json.Value VoidF Void)
+  | WrongType      [Text] TypeDefn (Json.Value VoidF Void)
+  | UnexpectedKeys [Text] [Text]
+  | MissingKeys    [Text] [Text]
     deriving (Eq, Show)
 
 verify
@@ -29,11 +32,6 @@ verify
   -> Validation [Mismatch] (Json.Value VoidF Void)
 verify = goValue []
   where
-    goValue
-      :: [Text]
-      -> Json.Value VoidF TypeDefn
-      -> Json.Value VoidF Void
-      -> Validation [Mismatch] (Json.Value VoidF Void)
     goValue path pat val = case (pat, val) of
       (JsonNull       , JsonNull      ) -> pure val
       (JsonTrue       , JsonTrue      ) -> pure val
@@ -56,17 +54,21 @@ verify = goValue []
       -> Json.Object VoidF Void
       -> Validation [Mismatch] (Json.Object VoidF Void)
     goObject path (Object p_o) (Object o) =
-      Object . Map.fromList <$> checked <* missings
+      Object . Map.fromList <$> checked <* checkUnexpected <* checkMissing
       where
-        checked  = traverse f (Map.toList o)
-        f (k, v) = case Map.lookup k p_o of
-          Nothing  -> Failure [UnexpectedKey path k]
-          Just p_v -> (k,) <$> goValue (k:path) p_v v
-        missings =
-          let filtered = Map.filterWithKey (\k _ -> k `notElem` Map.keys o) p_o
-          in if Map.null filtered
-               then pure ()
-               else Failure [MissingKeys path (Map.keys filtered)]
+        checked = for (Set.toList present_keys) $ \k ->
+          (k,) <$> goValue (k:path) (p_o Map.! k) (o Map.! k)
+        o_keys          = Map.keysSet o
+        p_o_keys        = Map.keysSet p_o
+        missing_keys    = Set.difference p_o_keys o_keys
+        unexpected_keys = Set.difference o_keys p_o_keys
+        present_keys    = Set.intersection o_keys p_o_keys
+        checkUnexpected =
+          unless (Set.null unexpected_keys) $
+            Failure [UnexpectedKeys path (Set.toList unexpected_keys)]
+        checkMissing    =
+          unless (Set.null missing_keys) $
+            Failure [MissingKeys path (Set.toList missing_keys)]
 
     goArray
       :: [Text]

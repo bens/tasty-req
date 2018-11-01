@@ -1,0 +1,6 @@
+test-golden/json-parser/0011-broken-reject-generator.json:1:11:
+  |
+1 | { "foo": {:g string } }
+  |           ^
+unexpected ':'
+expecting '}' or string literal

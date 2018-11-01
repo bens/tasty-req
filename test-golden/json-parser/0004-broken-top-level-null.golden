@@ -1,0 +1,5 @@
+test-golden/json-parser/0004-broken-top-level-null.json:1:1:
+  |
+1 | null
+  | ^
+unexpected 'n'

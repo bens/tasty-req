@@ -1,0 +1,5 @@
+test-golden/json-parser/0006-broken-top-level-false.json:1:1:
+  |
+1 | false
+  | ^
+unexpected 'f'
