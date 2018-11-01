@@ -7,11 +7,11 @@ module Test.Tasty.Req.Verify
 import Data.String               (fromString)
 import Data.Text                 (Text)
 import Data.Validation           (Validation(Failure))
-import Data.Void                 (Void)
+import Data.Void                 (Void, absurd)
 
 import qualified Data.Map        as Map
 
-import Test.Tasty.Req.Types      (TypeDefn(..), VoidF)
+import Test.Tasty.Req.Types      (TypeDefn(..), VoidF, absurdF)
 import Test.Tasty.Req.Parse.JSON (Value(..), Object(..))
 
 import qualified Test.Tasty.Req.Parse.JSON as Json
@@ -21,7 +21,7 @@ data Mismatch
   | WrongType     [Text] TypeDefn (Json.Value VoidF Void)
   | UnexpectedKey [Text] Text
   | MissingKeys   [Text] [Text]
-    deriving Show
+    deriving (Eq, Show)
 
 verify
   :: Json.Value VoidF TypeDefn
@@ -45,7 +45,9 @@ verify = goValue []
       (JsonObject  p_o, JsonObject   o) -> JsonObject <$> goObject path p_o o
       (JsonArray  p_xs, JsonArray   xs) -> JsonArray <$> goArray path p_xs xs
       (JsonCustom _ ty,              _) -> goWildcard path ty val
-      (              _, JsonCustom _ _) -> error "impossible"
+      (              _, JsonCustom _ x) -> absurd x
+      (JsonCombine p_x,              _) -> absurdF p_x
+      (              _, JsonCombine  x) -> absurdF x
       (              _,              _) -> Failure [WrongValue path pat val]
 
     goObject

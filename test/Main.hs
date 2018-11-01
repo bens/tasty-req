@@ -6,7 +6,7 @@ import qualified Test.Tasty.Req.Parse.Test as Parse
 
 main :: IO ()
 main = do
-  parseTests <- Parse.mkTests "test-golden/parser"
+  scriptParseTests <- Parse.mkScriptTests "test-golden/script-parser"
   defaultMain $ testGroup "ALL"
-    [ parseTests
+    [ scriptParseTests
     ]

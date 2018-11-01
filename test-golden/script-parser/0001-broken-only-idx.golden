@@ -1,4 +1,4 @@
-test-golden/parser/0001-broken-only-idx.req:1:2:
+test-golden/script-parser/0001-broken-only-idx.req:1:2:
   |
 1 | 1
   |  ^

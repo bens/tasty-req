@@ -1,0 +1,9 @@
+1: POST /
+{ "a": {:g string},
+  "b": {:g integer},
+  "c": {:g double},
+  "d": {:g boolean},
+  "e": {:g maybe string},
+}
+---
+{:r 1?}

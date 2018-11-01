@@ -1,19 +1,19 @@
-cabal-version:         2.2
-name:                  tasty-req
-version:               0.1.0.0
+cabal-version:          2.2
+name:                   tasty-req
+version:                0.1.0.0
 -- synopsis:
 -- description:
-license:               BSD-3-Clause
-license-file:          LICENSE
-author:                Ben Sinclair
-maintainer:            ben.d.sinclair@gmail.com
-copyright:             Copyright (C) 2018 Ben Sinclair
-category:              Testing, Web
-build-type:            Simple
-extra-source-files:    CHANGELOG.md
+license:                BSD-3-Clause
+license-file:           LICENSE
+author:                 Ben Sinclair
+maintainer:             ben.d.sinclair@gmail.com
+copyright:              Copyright (C) 2018 Ben Sinclair
+category:               Testing, Web
+build-type:             Simple
+extra-source-files:     CHANGELOG.md
 
 common lang
-  default-language:    Haskell2010
+  default-language:     Haskell2010
   ghc-options:
     -Wall
     -Wcompat
@@ -35,8 +35,8 @@ common deps
     parser-combinators  >= 1.0.0,
     pretty              >= 1.1.3.6,
     pretty-show         >= 1.7,
+    random              >= 1.1,
     req                 >= 1.1.0,
-    scientific          >= 0.3.6,
     tasty               >= 1.1.0,
     text                >= 1.2.3,
     transformers        >= 0.5.5,
@@ -44,7 +44,7 @@ common deps
     validation          >= 1
 
 library
-  import:              lang, deps
+  import:               lang, deps
   exposed-modules:
     Test.Tasty.Req
     Test.Tasty.Req.Parse
@@ -53,16 +53,16 @@ library
     Test.Tasty.Req.Runner
     Test.Tasty.Req.Types
     Test.Tasty.Req.Verify
-  hs-source-dirs:      src
+  hs-source-dirs:       src
 
 test-suite tests
-  import:              lang, deps
-  type:                exitcode-stdio-1.0
-  hs-source-dirs:      test
-  main-is:             Main.hs
+  import:               lang, deps
+  type:                 exitcode-stdio-1.0
+  hs-source-dirs:       test
+  main-is:              Main.hs
   other-modules:
     Test.Tasty.Req.Parse.Test
   build-depends:
     tasty-req,
-    filepath           >= 1.4.2,
-    tasty-golden       >= 2.3.2
+    filepath            >= 1.4.2,
+    tasty-golden        >= 2.3.2

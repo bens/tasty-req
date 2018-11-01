@@ -1,4 +1,4 @@
-test-golden/parser/0007-broken-spaces.req:3:2:
+test-golden/script-parser/0007-broken-spaces.req:3:2:
   |
 3 |  ---
   |  ^

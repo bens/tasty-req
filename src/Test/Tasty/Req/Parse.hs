@@ -33,6 +33,18 @@ pRef = do
       (Json.runParser Json.combineVoidF Json.text')     -- object key
   pure (Ref r side path)
 
+-- GENERATOR
+
+pGenerator :: Ord e => P.ParsecT e Text m Generator
+pGenerator = term <|> (GenMaybe <$> (symbolH "maybe" *> term))
+  where
+    term = asum
+      [ GenString <$ symbolH "string"
+      , GenInteger <$ symbolH "integer"
+      , GenDouble <$ symbolH "double"
+      , GenBool   <$ symbolH "boolean"
+      ]
+
 -- TYPE DEFN
 
 pTypeDefn :: Ord e => P.ParsecT e Text m TypeDefn
@@ -65,7 +77,7 @@ pUrl = lexemeH (some pSegment)
 pCommand :: Ord e => P.ParsecT e Text m Command
 pCommand = do
   let requestPsr = Json.runParser Json.combineList $
-        let custom = [("r", pRef)]
+        let custom = [("r", Left <$> pRef), ("g", Right <$> pGenerator)]
         in Json.combine
            ( Json.withCustom (Json.customParsers custom) Json.object <>
              Json.withCustom (Json.customParsers custom) Json.custom

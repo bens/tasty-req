@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Test.Tasty.Req.Parse.Test
-  ( mkTests
+  ( mkScriptTests
   ) where
 
 import Control.Exception         (SomeException, try)
@@ -21,8 +21,8 @@ import qualified Text.Megaparsec as P
 import Test.Tasty.Req.Parse      (parser)
 import Test.Tasty.Req.Types      (Command)
 
-mkTests :: FilePath -> IO TestTree
-mkTests dir = do
+mkScriptTests :: FilePath -> IO TestTree
+mkScriptTests dir = do
   reqPaths <- sort <$> findByExtension [".req"] dir
   ts <- forM reqPaths $ \reqPath -> do
     let goldenPath = replaceExtension reqPath ".golden"

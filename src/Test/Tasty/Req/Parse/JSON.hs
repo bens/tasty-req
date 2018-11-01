@@ -1,3 +1,11 @@
+{- |
+  This JSON parser has a few extensions, it will parse and ignore comments, it
+  allows custom parsers of user-defined types (the 'x' parameter), and has a
+  syntax for merging JSON object together (the 'f' parameter).  The custom
+  parsers and merging can both be statically disallowed by instantiating the two
+  type parameters respectively to 'Void' and 'VoidF'.
+-}
+
 {-# LANGUAGE DeriveFunctor      #-}
 {-# LANGUAGE FlexibleContexts   #-}
 {-# LANGUAGE LambdaCase         #-}
@@ -30,6 +38,7 @@ import Data.Foldable                  (asum, toList)
 import Data.List                      (foldl', intersperse)
 import Data.List.NonEmpty             (NonEmpty((:|)))
 import Data.Map                       (Map)
+import Data.Maybe                     (fromMaybe)
 import Data.Semigroup                 (sconcat)
 import Data.Text                      (Text)
 
@@ -153,13 +162,15 @@ withCustom c (Parser x y) = Parser (fmap (map (\k _ -> k c)) x) (\_ -> y c)
 
 -- COMBINERS
 
+-- A combiner needs a way to inject a value into a structure type and a way to
+-- see if there is a single value contained in the structure.
 data Combine f = Combine (forall a. a -> f a) (forall a. f a -> Maybe a)
 
 combineList :: Combine NonEmpty
-combineList = Combine (:|[]) (\(x:|_) -> Just x)
+combineList = Combine (:|[]) (\(x:|xs) -> if null xs then Just x else Nothing)
 
 combineVoidF :: Combine VoidF
-combineVoidF = Combine undefined absurdF
+combineVoidF = Combine (error "combineVoidF: ka-boom!") (const Nothing)
 
 injectVoidF :: Value VoidF a -> Value NonEmpty a
 injectVoidF = \case
@@ -319,12 +330,13 @@ combine'
   :: (Ord e, Semigroup (f a))
   => Parser m e f x a -> Parser m e f x (Either a (f a))
 combine' p = otherParser $ \c d -> do
-  let Combine inj _ = d
-  xs <- P.sepBy1 (runParser' c d p) (symbol "<>")
-  case xs of
-    []   -> error "impossible: sepBy1"
-    [y]  -> pure (Left y)
-    y:ys -> pure (Right (sconcat (fmap inj (y :| ys))))
+  let Combine inject inspect = d
+  let psr     = runParser' c d p
+  let psrMany = (symbol "<>" *> P.sepBy psr (symbol "<>")) <|> pure []
+  x <- psr
+  fromMaybe (pure []) (inspect (inject psrMany)) >>= \case
+    [] -> pure (Left x)
+    xs -> pure (Right (sconcat (fmap inject (x :| xs))))
 
 custom' :: Ord e => Parser m e f x (Text, x)
 custom' = prefixParser '{' $ \(CustomParser c) _ -> c <* symbol "}"

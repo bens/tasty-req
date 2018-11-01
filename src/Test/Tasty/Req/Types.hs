@@ -3,16 +3,17 @@
 {-# LANGUAGE DeriveTraversable  #-}
 {-# LANGUAGE EmptyCase          #-}
 {-# LANGUAGE EmptyDataDecls     #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase         #-}
 
 module Test.Tasty.Req.Types
   ( Command(..)
-  , Ref(..), Side(..), TypeDefn(..)
+  , Ref(..), Side(..), Generator(..), TypeDefn(..)
     -- * JSON
   , Value(..), Object(..)
-    -- * Higher-kinded Show class
-  , ShowF(..)
-    -- * Higher-kinded empty type
+    -- * Eq and Show for Functors
+  , EqF(..), ShowF(..)
+    -- * Functor empty type
   , VoidF, absurdF
   ) where
 
@@ -20,18 +21,25 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Map           (Map)
 import Data.Text          (Text)
 
+-- EqF class
+
+class EqF f where
+  eqF :: Eq a => f a -> f a -> Bool
+
+instance EqF NonEmpty where eqF = (==)
+instance EqF VoidF    where eqF = absurdF
+
+-- ShowF class
+
 class ShowF f where
   showF :: Show a => f a -> String
   showsPrecF :: Show a => Int -> f a -> ShowS
 
-instance ShowF NonEmpty where
-  showF = show
-  showsPrecF = showsPrec
+instance ShowF NonEmpty where showF = show;    showsPrecF   = showsPrec
+instance ShowF VoidF    where showF = absurdF; showsPrecF _ = absurdF
 
-newtype WrapShowF f a = WrapShowF (f a)
-
-instance (ShowF f, Show a) => Show (WrapShowF f a) where
-  showsPrec p (WrapShowF fa) = showsPrecF p fa
+strApp1 :: String -> Int -> ShowS -> ShowS
+strApp1 s p sh = showParen (p >= 11) $ showString s . showChar ' ' . sh
 
 showsApp1 :: Show a => String -> Int -> a -> ShowS
 showsApp1 s p a = strApp1 s p (showsPrec 11 a)
@@ -39,8 +47,7 @@ showsApp1 s p a = strApp1 s p (showsPrec 11 a)
 showsFApp1 :: (ShowF f, Show a) => String -> Int -> f a -> ShowS
 showsFApp1 s p fa = strApp1 s p (showsPrecF 11 fa)
 
-strApp1 :: String -> Int -> ShowS -> ShowS
-strApp1 s p sh = showParen (p >= 11) $ showString s . showChar ' ' . sh
+-- Command AST
 
 data Ref = Ref Int Side [Either Int Text]
   deriving (Eq, Ord, Show)
@@ -48,6 +55,14 @@ data Ref = Ref Int Side [Either Int Text]
 data Side
   = Request
   | Response
+    deriving (Eq, Ord, Show)
+
+data Generator
+  = GenString
+  | GenInteger
+  | GenDouble
+  | GenBool
+  | GenMaybe Generator
     deriving (Eq, Ord, Show)
 
 data TypeDefn
@@ -66,9 +81,11 @@ data Command = Command
   , command'always        :: Bool
   , command'method        :: Text
   , command'url           :: [Either Ref Text]
-  , command'request_body  :: Maybe (Value NonEmpty Ref)
+  , command'request_body  :: Maybe (Value NonEmpty (Either Ref Generator))
   , command'response_body :: Maybe (Value NonEmpty (Either Ref TypeDefn))
   } deriving Show
+
+-- JSON Values
 
 data Value f a
   = JsonNull
@@ -83,6 +100,22 @@ data Value f a
   | JsonCombine (f (Value f a))
     deriving (Functor, Foldable, Traversable)
 
+instance (EqF f, Eq a) => Eq (Value f a) where
+  JsonNull        == JsonNull         = True
+  JsonTrue        == JsonTrue         = True
+  JsonFalse       == JsonFalse        = True
+  JsonText x      == JsonText y       = x == y
+  JsonInteger x   == JsonInteger y    = x == y
+  JsonDouble x    == JsonDouble y     = x == y
+  JsonObject x    == JsonObject y     = x == y
+  JsonArray xs    == JsonArray ys     = xs == ys
+  JsonCombine xs  == JsonCombine ys   = eqF xs ys
+  JsonCustom nm x == JsonCustom nm' y = nm == nm' && x == y
+  _               == _                = False
+
+-- instance (OrdF f, Ord a) => Ord (Value f a) where
+--   compare JsonNull
+
 instance (ShowF f, Show a) => Show (Value f a) where
   showsPrec d = \case
     JsonNull        -> showString "JsonNull"
@@ -94,27 +127,15 @@ instance (ShowF f, Show a) => Show (Value f a) where
     JsonObject o    -> showsApp1  "JsonObject"  d o
     JsonArray xs    -> showsApp1  "JsonArray"   d xs
     JsonCombine xs  -> showsFApp1 "JsonCombine" d xs
-    JsonCustom nm x -> showParen (d > app_prec) $
-      showString "JsonCustom "
-      . shows nm
-      . showChar ' '
-      . showsPrec (app_prec+1) x
-    where
-      app_prec = 10
+    JsonCustom nm x -> showsApp1  ("JsonCustom " ++ show nm) d x
+
+-- JSON Objects
 
 newtype Object f a
   = Object (Map Text (Value f a))
-    deriving (Functor, Foldable, Traversable)
+    deriving (Eq, Show, Functor, Foldable, Monoid, Semigroup, Traversable)
 
-instance (ShowF f, Show a) => Show (Object f a) where
-  showsPrec d (Object o) = showsApp1 "Object" d o
-
-instance Semigroup (Object f a) where
-  Object a <> Object b = Object (a <> b)
-
-instance Monoid (Object f a) where
-  mempty = Object mempty
-  mappend = (<>)
+-- Empty functor type
 
 data VoidF a
 
@@ -132,7 +153,3 @@ instance Traversable VoidF where
 
 instance Semigroup (VoidF a) where
   x <> _ = absurdF x
-
-instance ShowF VoidF where
-  showF = absurdF
-  showsPrecF _ = absurdF

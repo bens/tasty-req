@@ -1,4 +1,4 @@
-test-golden/parser/0004-broken-heading-only.req:2:1:
+test-golden/script-parser/0004-broken-heading-only.req:2:1:
   |
 2 | <empty line>
   | ^
