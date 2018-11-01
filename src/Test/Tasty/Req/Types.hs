@@ -19,6 +19,7 @@ module Test.Tasty.Req.Types
 
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map           (Map)
+import Data.Set           (Set)
 import Data.Text          (Text)
 
 -- EqF class
@@ -49,7 +50,7 @@ showsFApp1 s p fa = strApp1 s p (showsPrecF 11 fa)
 
 -- Command AST
 
-data Ref = Ref Int Side [Either Int Text]
+data Ref = Ref Int Side [Either Int Text] (Set Text)
   deriving (Eq, Ord, Show)
 
 data Side

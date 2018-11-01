@@ -23,12 +23,15 @@
                     (fromList
                        [ ( "bib"
                          , JsonCombine
-                             (JsonCustom "r" (Left (Ref 1 Request [ Left 0 ])) :|
+                             (JsonCustom "r" (Left (Ref 1 Request [ Left 0 ] (fromList []))) :|
                                 [ JsonObject (Object (fromList [ ( "uff" , JsonInteger 987 ) ])) ])
                          )
                        , ( "bob"
                          , JsonCustom
-                             "r" (Left (Ref 1 Request [ Left 1 , Right "bar" , Right "abc" ]))
+                             "r"
+                             (Left
+                                (Ref
+                                   1 Request [ Left 1 , Right "bar" , Right "abc" ] (fromList [])))
                          )
                        ]))
              ])

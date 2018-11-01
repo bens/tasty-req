@@ -10,13 +10,17 @@ import Data.Char                            (isAlphaNum, isUpper)
 import Data.Foldable                        (asum)
 import Data.Text                            (Text)
 
+import qualified Data.Set                   as Set
 import qualified Text.Megaparsec            as P
 import qualified Text.Megaparsec.Char       as P.C
 import qualified Text.Megaparsec.Char.Lexer as P.L
 
-import Test.Tasty.Req.Parse.Common
+import Test.Tasty.Req.Parse.Common          (ensure1stCol, hspace, lexemeH,
+                                             spaces, symbol, symbolH)
+import Test.Tasty.Req.Types                 (Command(..), Generator(..), Ref(..),
+                                             Side(..), TypeDefn(..))
+
 import qualified Test.Tasty.Req.Parse.JSON  as Json
-import Test.Tasty.Req.Types
 
 parser :: Ord e => P.ParsecT e Text m [Command]
 parser = spaces *> many pCommand <* P.eof
@@ -27,11 +31,13 @@ pRef :: Ord e => P.ParsecT e Text m Ref
 pRef = do
   r <- lexemeH P.L.decimal
   side <- (Request <$ P.C.char '?') <|> (Response <$ P.C.char '!')
-  path <- many $ P.between (P.C.char '[') (P.C.char ']') $
+  path <- lexemeH $ many $ P.between (P.C.char '[') (P.C.char ']') $
     P.eitherP
       (Json.runParser Json.combineVoidF Json.integer')  -- array index
       (Json.runParser Json.combineVoidF Json.text')     -- object key
-  pure (Ref r side path)
+  let psr = Json.runParser Json.combineVoidF Json.text'
+  sans <- (symbol "/" *> many (lexemeH psr)) <|> pure []
+  pure (Ref r side path (Set.fromList sans))
 
 -- GENERATOR
 

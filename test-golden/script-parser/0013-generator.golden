@@ -15,6 +15,6 @@
                    , ( "e" , JsonCustom "g" (Right (GenMaybe GenString)) )
                    ])))
     , command'response_body =
-        Just (JsonCustom "r" (Left (Ref 1 Request [])))
+        Just (JsonCustom "r" (Left (Ref 1 Request [] (fromList []))))
     }
 ]

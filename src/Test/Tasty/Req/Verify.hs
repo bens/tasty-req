@@ -58,11 +58,11 @@ verify = goValue []
       where
         checked = for (Set.toList present_keys) $ \k ->
           (k,) <$> goValue (k:path) (p_o Map.! k) (o Map.! k)
-        o_keys          = Map.keysSet o
-        p_o_keys        = Map.keysSet p_o
-        missing_keys    = Set.difference p_o_keys o_keys
-        unexpected_keys = Set.difference o_keys p_o_keys
-        present_keys    = Set.intersection o_keys p_o_keys
+        o_keys          = Map.keysSet        o
+        p_o_keys        = Map.keysSet      p_o
+        missing_keys    = Set.difference   p_o_keys   o_keys
+        unexpected_keys = Set.difference     o_keys p_o_keys
+        present_keys    = Set.intersection p_o_keys   o_keys
         checkUnexpected =
           unless (Set.null unexpected_keys) $
             Failure [UnexpectedKeys path (Set.toList unexpected_keys)]

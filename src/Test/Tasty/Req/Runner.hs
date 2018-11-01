@@ -15,6 +15,7 @@ module Test.Tasty.Req.Runner
   ( Error(..), runCommands, responseParser
   ) where
 
+import Control.Monad                   (unless)
 import Control.Monad.Except            (MonadError(..))
 import Control.Monad.IO.Class          (MonadIO)
 import Control.Monad.State             (MonadState(..), gets, modify)
@@ -35,6 +36,7 @@ import System.Random                   (Random, StdGen, getStdGen, random)
 
 import qualified Data.ByteString.Char8 as BS.C
 import qualified Data.Map              as Map
+import qualified Data.Set              as Set
 import qualified Data.Text             as Text
 import qualified Data.Text.Encoding    as Text
 import qualified Network.HTTP.Req      as Req
@@ -171,22 +173,30 @@ resolveRef f nm x = case f x of
   Right ref -> Json.injectVoidF . fmap absurd <$> deref ref
 
 deref :: Ref -> M (Json.Value VoidF Void)
-deref ref@(Ref i side path0) = do
+deref ref@(Ref i side path0 sans) = do
   m <- gets (Map.lookup (i, side) . fst)
   case m of
     Nothing -> throwError (BadReference ref)
-    Just x -> go path0 x
-      where
-        go [] o = pure o
-        go (Left j:path) (Json.JsonArray xs) =
-          case drop j xs of
-            o':_    -> go path o'
-            []      -> throwError (BadReference ref)
-        go (Right k:path) (Json.JsonObject (Json.Object o)) =
-          case Map.lookup k o of
-            Just o' -> go path o'
-            Nothing -> throwError (BadReference ref)
-        go _ _ = throwError (BadReference ref)
+    Just x -> do
+      x' <- go path0 x
+      case (Set.null sans, x') of
+        (True, _) -> pure x'
+        (False, Json.JsonObject (Json.Object o)) -> do
+          unless (sans `Set.isSubsetOf` Map.keysSet o) $
+            throwError undefined
+          pure (Json.JsonObject (Json.Object (Map.restrictKeys o sans)))
+        (False, _) -> throwError undefined
+  where
+    go [] o = pure o
+    go (Left j:path) (Json.JsonArray xs) =
+      case drop j xs of
+        o':_    -> go path o'
+        []      -> throwError (BadReference ref)
+    go (Right k:path) (Json.JsonObject (Json.Object o)) =
+      case Map.lookup k o of
+        Just o' -> go path o'
+        Nothing -> throwError (BadReference ref)
+    go _ _ = throwError (BadReference ref)
 
 nextRandom :: Random a => M a
 nextRandom = do
