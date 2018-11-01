@@ -1,0 +1,34 @@
+[ Command
+    { command'id = 1
+    , command'always = False
+    , command'method = "POST"
+    , command'url = [ Right "/" ]
+    , command'request_body =
+        Just (JsonObject (Object (fromList [ ( "a" , JsonInteger 0 ) ])))
+    , command'response_body =
+        Just
+          (JsonCombine
+             (JsonObject
+                (Object
+                   (fromList
+                      [ ( "a"
+                        , JsonCustom "r" (Left (Ref 1 Request [ Right "a" ] (fromList [])))
+                        )
+                      ])) :|
+                [ JsonObject
+                    (Object
+                       (fromList
+                          [ ( "b"
+                            , JsonCustom "r" (Left (Ref 1 Request [ Right "a" ] (fromList [])))
+                            )
+                          ]))
+                , JsonObject
+                    (Object
+                       (fromList
+                          [ ( "c"
+                            , JsonCustom "r" (Left (Ref 1 Request [ Right "a" ] (fromList [])))
+                            )
+                          ]))
+                ]))
+    }
+]

@@ -7,15 +7,12 @@
         Just (JsonObject (Object (fromList [ ( "a" , JsonInteger 0 ) ])))
     , command'response_body =
         Just
-          (JsonCombine
-             (JsonCustom "r" (Left (Ref 1 Request [] (fromList []))) :|
-                [ JsonObject
-                    (Object
-                       (fromList
-                          [ ( "b"
-                            , JsonCustom "r" (Left (Ref 1 Request [ Right "a" ] (fromList [])))
-                            )
-                          ]))
-                ]))
+          (JsonObject
+             (Object
+                (fromList
+                   [ ( "b"
+                     , JsonCustom "r" (Left (Ref 1 Request [ Right "a" ] (fromList [])))
+                     )
+                   ])))
     }
 ]
