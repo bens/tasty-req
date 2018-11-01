@@ -30,6 +30,7 @@ common deps
     containers          >= 0.5.11,
     data-default        >= 0.7.1,
     http-client         >= 0.5.13,
+    lens                >= 4.17,
     megaparsec          >= 7.0.1,
     mtl                 >= 2.2.2,
     parser-combinators  >= 1.0.0,

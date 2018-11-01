@@ -17,7 +17,7 @@ import qualified Test.Tasty.Providers as Tasty
 import qualified Text.Megaparsec      as P
 
 import Test.Tasty.Req.Parse           (parser)
-import Test.Tasty.Req.Runner          (Error(..), runCommands)
+import Test.Tasty.Req.Runner          (Error(..), WithCommand(..), runCommands)
 import Test.Tasty.Req.Types           (Command)
 
 reqTest :: Tasty.TestName -> FilePath -> Text -> Tasty.TestTree
@@ -42,9 +42,9 @@ runIt _options scriptPath urlPrefix = do
       pure (Tasty.testFailed (P.errorBundlePretty err))
     Right (Right cmds) ->
       runCommands urlPrefix cmds >>= \case
-        Left (HttpE (Req.VanillaHttpException exc)) ->
-          pure $ Tasty.testFailed (ppShow exc)
-        Left err ->
-          pure $ Tasty.testFailed (ppShow err)
+        Left (WithCommand cmd (HttpE (Req.VanillaHttpException exc))) ->
+          pure $ Tasty.testFailed (ppShow (cmd, exc))
+        Left (WithCommand cmd err) ->
+          pure $ Tasty.testFailed (ppShow (cmd, err))
         Right () ->
           pure $ Tasty.testPassed ""
