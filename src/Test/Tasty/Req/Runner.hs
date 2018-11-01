@@ -116,7 +116,9 @@ runCommands urlPrefix cmds = do
   case mapM_ (\c -> first (WithCommand c) $ runCommand' urlPrefix c) cmds of
     M m -> runReaderT (runEitherT (evalStateT m (Map.empty, gen))) httpConfig
 
-runCommand' :: (AsError e, AsHttpException e) => Text -> Command -> M e ()
+runCommand'
+  :: (AsError e, AsHttpException e)
+  => Text -> Command -> M e ()
 runCommand' urlPrefix cmd = do
   (url, opts) <- buildUrl urlPrefix (command'url cmd)
   case command'method cmd of
@@ -141,7 +143,11 @@ runCommand' urlPrefix cmd = do
     method ->
       throwError (review _Error (UnknownMethod method))
 
-buildUrl :: AsError e => Text -> [Either Ref Text] -> M e (Req.Url 'Req.Http, Req.Option schema)
+buildUrl
+  :: AsError e
+  => Text
+  -> [Either Ref Text]
+  -> M e (Req.Url 'Req.Http, Req.Option schema)
 buildUrl urlPrefix urlParts = do
   let f url [] = pure url
       f url (Right x:xs)  = f (url <> x) xs
@@ -217,7 +223,7 @@ deref ref@(Ref i side path0 sans) = do
         (False, Json.JsonObject (Json.Object o)) -> do
           unless (sans `Set.isSubsetOf` Map.keysSet o) $
             throwError undefined
-          pure (Json.JsonObject (Json.Object (Map.restrictKeys o sans)))
+          pure (Json.JsonObject (Json.Object (Map.withoutKeys o sans)))
         (False, _) -> throwError undefined
   where
     go [] o = pure o
@@ -235,8 +241,7 @@ nextRandom :: Random a => M e a
 nextRandom = do
   g <- gets snd
   let (x, g') = random g
-  modify (\(m, _) -> (m, g'))
-  pure x
+  x <$ modify (\(m, _) -> (m, g'))
 
 instanceGenerator :: Text -> Generator -> M e (Json.Value f Void)
 instanceGenerator nm = \case
