@@ -18,14 +18,16 @@ module Test.Tasty.Req.Runner
 
 import Control.Lens                    (Prism', (#), prism', review)
 import Control.Monad                   (unless)
-import Control.Monad.Except            (MonadError(..))
+import Control.Monad.Except            (MonadError, catchError, throwError)
 import Control.Monad.IO.Class          (MonadIO)
-import Control.Monad.State             (MonadState(..), gets, modify)
-import Control.Monad.Trans.Class       (MonadTrans(lift))
+import Control.Monad.Random            (RandT)
+import Control.Monad.Random.Class      (MonadRandom, getRandom)
+import Control.Monad.State             (MonadState, gets, modify, state)
+import Control.Monad.Trans.Class       (lift)
 import Control.Monad.Trans.Either      (EitherT, left, mapEitherT, runEitherT)
 import Control.Monad.Trans.Reader      (ReaderT, ask, runReaderT)
 import Control.Monad.Trans.State       (StateT(StateT), evalStateT, runStateT)
-import Data.Bifunctor                  (Bifunctor(..), first)
+import Data.Bifunctor                  (Bifunctor, bimap, first)
 import Data.Default                    (def)
 import Data.Functor.Identity           (Identity)
 import Data.List.NonEmpty              (NonEmpty)
@@ -35,7 +37,7 @@ import Data.String                     (fromString)
 import Data.Text                       (Text)
 import Data.Validation                 (Validation(Success, Failure))
 import Data.Void                       (Void, absurd)
-import System.Random                   (Random, StdGen, getStdGen, random)
+import System.Random                   (RandomGen)
 
 import qualified Data.ByteString.Char8 as BS.C
 import qualified Data.Map              as Map
@@ -71,21 +73,22 @@ data Error
 
 deriving instance Show Error
 
-newtype M e a =
-  M (StateT (Map (Int, Side) (Json.Value VoidF Void), StdGen)
+newtype M g e a =
+  M (StateT (Map (Int, Side) (Json.Value VoidF Void))
        (EitherT e
-          (ReaderT Req.HttpConfig IO)) a)
-  deriving (Functor, Applicative, Monad, MonadIO)
+          (ReaderT Req.HttpConfig
+             (RandT g IO))) a)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadRandom)
 
-instance Bifunctor M where
+instance Bifunctor (M g) where
   bimap f g (M m) = M $ StateT $ \s ->
     mapEitherT (fmap (bimap f (first g))) $ runStateT m s
 
-instance MonadError e (M e) where
+instance MonadError e (M g e) where
   throwError e = M (lift (throwError e))
   catchError (M m) h = M $ catchError m $ \err -> case h err of M m' -> m'
 
-instance MonadState (Map (Int, Side) (Json.Value VoidF Void), StdGen) (M e) where
+instance MonadState (Map (Int, Side) (Json.Value VoidF Void)) (M g e) where
   state = M . state
 
 class AsHttpException e where
@@ -105,20 +108,25 @@ class AsError e where
 instance AsError Error where
   _Error = id
 
-instance AsHttpException e => Req.MonadHttp (M e) where
+instance AsHttpException e => Req.MonadHttp (M g e) where
   handleHttpException = M . lift . left . review _HttpException
   getHttpConfig = M (lift $ lift ask)
 
-runCommands :: Text -> [Command] -> IO (Either (WithCommand Error) ())
+runCommands
+  :: RandomGen g
+  => Text -> [Command]
+  -> RandT g IO (Either (WithCommand Error) ())
 runCommands urlPrefix cmds = do
   let httpConfig = def
-  gen <- getStdGen
-  case mapM_ (\c -> first (WithCommand c) $ runCommand' urlPrefix c) cmds of
-    M m -> runReaderT (runEitherT (evalStateT m (Map.empty, gen))) httpConfig
+  let logged = [ (command'always c, first (WithCommand c) $ runCommand' urlPrefix c)
+               | c <- cmds
+               ]
+  case mapM_ snd logged of
+    M m -> runReaderT (runEitherT (evalStateT m Map.empty)) httpConfig
 
 runCommand'
-  :: (AsError e, AsHttpException e)
-  => Text -> Command -> M e ()
+  :: (AsError e, AsHttpException e, RandomGen g)
+  => Text -> Command -> M g e ()
 runCommand' urlPrefix cmd = do
   (url, opts) <- buildUrl urlPrefix (command'url cmd)
   case command'method cmd of
@@ -147,7 +155,7 @@ buildUrl
   :: AsError e
   => Text
   -> [Either Ref Text]
-  -> M e (Req.Url 'Req.Http, Req.Option schema)
+  -> M g e (Req.Url 'Req.Http, Req.Option schema)
 buildUrl urlPrefix urlParts = do
   let f url [] = pure url
       f url (Right x:xs)  = f (url <> x) xs
@@ -165,23 +173,23 @@ buildUrl urlPrefix urlParts = do
     Just (url, opts) -> pure (url, opts)
 
 buildRequestBody
-  :: AsError e
+  :: (AsError e, RandomGen g)
   => Int
   -> Maybe (Json.Value NonEmpty (Either Ref Generator))
-  -> M e Req.ReqBodyBs
+  -> M g e Req.ReqBodyBs
 buildRequestBody _ Nothing = pure (Req.ReqBodyBs "")
 buildRequestBody i (Just req) = do
   req'
     <-  Json.substitute (resolveRef (either Right Left)) req
     >>= Json.substitute instanceGenerator
     >>= squash
-  modify (\(m, g) -> (Map.insert (i, Request) req' m, g))
+  modify (Map.insert (i, Request) req')
   pure (Req.ReqBodyBs (BS.C.pack (PP.render (Json.ppValue absurd req'))))
 
 responseParser :: P.ParsecT Void Text Identity (Json.Value VoidF Void)
 responseParser = Json.runParser Json.combineVoidF (Json.object <> Json.array) <* P.eof
 
-parseResponse :: AsError e => Req.BsResponse -> M e (Maybe (Json.Value VoidF Void))
+parseResponse :: AsError e => Req.BsResponse -> M g e (Maybe (Json.Value VoidF Void))
 parseResponse resp
   | BS.C.null (Req.responseBody resp) = pure Nothing
   | otherwise = either badParse (pure . Just) $ P.parse responseParser "" respText
@@ -194,7 +202,7 @@ verifyResponse
   => Int
   -> Maybe (Json.Value NonEmpty (Either Ref TypeDefn))
   -> Maybe (Json.Value VoidF Void)
-  -> M e ()
+  -> M g e ()
 verifyResponse _ Nothing Nothing = pure ()
 verifyResponse i (Just p_x) (Just x) = do
   p_x'
@@ -202,18 +210,18 @@ verifyResponse i (Just p_x) (Just x) = do
     >>= squash
   case verify p_x' x of
     Failure errs -> throwError (_Error # VerifyFailed errs)
-    Success y    -> modify (\(m, g) -> (Map.insert (i, Response) y m, g))
+    Success y    -> modify (Map.insert (i, Response) y)
 verifyResponse _ (Just _) Nothing = throwError (_Error # ExpectedResponse)
 verifyResponse _ Nothing (Just _) = throwError (_Error # UnexpectedResponse)
 
-resolveRef :: AsError e => (a -> Either b Ref) -> Text -> a -> M e (Json.Value NonEmpty b)
+resolveRef :: AsError e => (a -> Either b Ref) -> Text -> a -> M g e (Json.Value NonEmpty b)
 resolveRef f nm x = case f x of
   Left y    -> pure (Json.JsonCustom nm y)
   Right ref -> Json.injectVoidF . fmap absurd <$> deref ref
 
-deref :: AsError e => Ref -> M e (Json.Value VoidF Void)
+deref :: AsError e => Ref -> M g e (Json.Value VoidF Void)
 deref ref@(Ref i side path0 sans) = do
-  m <- gets (Map.lookup (i, side) . fst)
+  m <- gets (Map.lookup (i, side))
   case m of
     Nothing -> throwError (_Error # BadReference ref)
     Just x -> do
@@ -237,25 +245,19 @@ deref ref@(Ref i side path0 sans) = do
         Nothing -> throwError (_Error # BadReference ref)
     go _ _ = throwError (_Error # BadReference ref)
 
-nextRandom :: Random a => M e a
-nextRandom = do
-  g <- gets snd
-  let (x, g') = random g
-  x <$ modify (\(m, _) -> (m, g'))
-
-instanceGenerator :: Text -> Generator -> M e (Json.Value f Void)
+instanceGenerator :: RandomGen g => Text -> Generator -> M g e (Json.Value f Void)
 instanceGenerator nm = \case
-  GenString    -> Json.JsonText . Text.pack . ("foobar"++) . show <$> nextRandom @Int16
-  GenInteger   -> Json.JsonInteger <$> nextRandom
-  GenDouble    -> Json.JsonDouble <$> nextRandom
-  GenBool      -> (\b -> if b then Json.JsonTrue else Json.JsonFalse) <$> nextRandom
+  GenString    -> Json.JsonText . Text.pack . ("foobar"++) . show <$> getRandom @_ @Int16
+  GenInteger   -> Json.JsonInteger <$> getRandom
+  GenDouble    -> Json.JsonDouble <$> getRandom
+  GenBool      -> (\b -> if b then Json.JsonTrue else Json.JsonFalse) <$> getRandom
   GenMaybe gen -> do
-    b <- nextRandom @Int8
+    b <- getRandom @_ @Int8
     if b < 16 then pure Json.JsonNull else instanceGenerator nm gen
 
 squash
   :: (AsError e, Traversable f, Show a)
-  => Json.Value f a -> M e (Json.Value VoidF a)
+  => Json.Value f a -> M g e (Json.Value VoidF a)
 squash = Json.elimCombine f
   where
     f (Json.JsonObject a) (Json.JsonObject b) = pure (Json.JsonObject (a <> b))

@@ -82,26 +82,26 @@ pUrl = lexemeH (some pSegment)
 
 pCommand :: Ord e => P.ParsecT e Text m Command
 pCommand = do
-  let requestPsr = Json.runParser Json.combineList $
-        let custom = [("r", Left <$> pRef), ("g", Right <$> pGenerator)]
-        in Json.combine
-           ( Json.withCustom (Json.customParsers custom) Json.object <>
-             Json.withCustom (Json.customParsers custom) Json.custom
-           ) <>
-           Json.withCustom (Json.customParsers custom) Json.array
-      expectedPsr = Json.runParser Json.combineList $
-        let customA = [("r", Left <$> pRef), ("t", Right <$> pTypeDefn)]
-            customB = [("r", Left <$> pRef)]
-        in Json.combine
-           ( Json.withCustom (Json.customParsers customA) Json.object <>
-             Json.withCustom (Json.customParsers customB) Json.custom
-           ) <>
-           Json.withCustom (Json.customParsers customA) Json.array
   n       <- ensure1stCol *> P.L.decimal
   always  <- ((True <$ P.C.char '*') <|> pure False) <* symbolH ":"
   method  <- pMethod
   url     <- pUrl <* hspace <* P.C.newline
-  request <- optional requestPsr
+  request <- optional $
+    Json.runParser Json.combineList $
+      let custom = [("r", Left <$> pRef), ("g", Right <$> pGenerator)]
+      in Json.combine
+         ( Json.withCustom (Json.customParsers custom) Json.object <>
+           Json.withCustom (Json.customParsers custom) Json.custom
+         ) <>
+         Json.withCustom (Json.customParsers custom) Json.array
   spaces *> ensure1stCol *> symbol "---"
-  expected <- optional expectedPsr
+  expected <- optional $
+    Json.runParser Json.combineList $
+      let customA = [("r", Left <$> pRef), ("t", Right <$> pTypeDefn)]
+          customB = [("r", Left <$> pRef)]
+      in Json.combine
+         ( Json.withCustom (Json.customParsers customA) Json.object <>
+           Json.withCustom (Json.customParsers customB) Json.custom
+         ) <>
+         Json.withCustom (Json.customParsers customA) Json.array
   pure (Command n always method url request expected)
