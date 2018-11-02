@@ -6,7 +6,7 @@ bodies.  A basic example is
     1: POST /
     { "testing": 123 }
     ---
-    { "result": "OK", "testing": 123 }
+    { "result": "OK" }
 
 This makes a POST request to the `/` path of the server we are testing against,
 passing `{ "testing: 123 }` as the request body, and expecting to receive `{
