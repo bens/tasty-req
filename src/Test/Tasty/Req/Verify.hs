@@ -57,7 +57,7 @@ verify = goValue []
       Object . Map.fromList <$> checked <* checkUnexpected <* checkMissing
       where
         checked = for (Set.toList present_keys) $ \k ->
-          (k,) <$> goValue (k:path) (p_o Map.! k) (o Map.! k)
+          (k,) <$> goValue (path ++ [k]) (p_o Map.! k) (o Map.! k)
         o_keys          = Map.keysSet        o
         p_o_keys        = Map.keysSet      p_o
         missing_keys    = Set.difference   p_o_keys   o_keys
@@ -76,7 +76,7 @@ verify = goValue []
       -> [Json.Value VoidF Void]
       -> Validation [Mismatch] [Json.Value VoidF Void]
     goArray path p_xs xs =
-        traverse (\(i, p_x, x) -> goValue (fromString (show i):path) p_x x)
+        traverse (\(i, p_x, x) -> goValue (path ++ [fromString (show i)]) p_x x)
           (zip3 [(0::Int)..] p_xs xs)
 
     goWildcard

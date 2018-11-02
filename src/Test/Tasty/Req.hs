@@ -4,12 +4,12 @@ module Test.Tasty.Req
   ( reqTest
   ) where
 
-import Control.Monad.Random           (runRandT)
+import Control.Monad.Random           (evalRandT)
 import Control.Exception              (SomeException, try)
 import Data.Functor.Identity          (Identity)
 import Data.Text                      (Text)
 import Data.Void                      (Void)
-import System.Random                  (getStdGen, setStdGen)
+import System.Random                  (newStdGen)
 import Text.Show.Pretty               (ppShow)
 
 import qualified Data.Text.IO         as Text
@@ -43,10 +43,8 @@ runIt _options scriptPath urlPrefix = do
     Right (Left err) ->
       pure (Tasty.testFailed (P.errorBundlePretty err))
     Right (Right cmds) -> do
-      g <- getStdGen
-      (r, g') <- runRandT (runCommands urlPrefix cmds) g
-      setStdGen g'
-      case r of
+      g <- newStdGen
+      evalRandT (runCommands urlPrefix cmds) g >>= \case
         Left (WithCommand cmd (HttpE (Req.VanillaHttpException exc))) ->
           pure $ Tasty.testFailed (ppShow (cmd, exc))
         Left (WithCommand cmd err) ->
