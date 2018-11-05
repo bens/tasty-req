@@ -13,6 +13,7 @@
 
 module Test.Tasty.Req.Runner
   ( Error(..), WithCommand(..),
+    OptionModifier,
     runCommands, responseParser
   ) where
 
@@ -29,11 +30,13 @@ import Control.Monad.Trans.Either      (EitherT, left, mapEitherT, runEitherT)
 import Control.Monad.Trans.Reader      (ReaderT, ask, runReaderT)
 import Control.Monad.Trans.State       (StateT(StateT), runStateT)
 import Data.Bifunctor                  (Bifunctor, bimap, first)
+import Data.ByteString.Char8           (ByteString)
 import Data.Default                    (def)
 import Data.Functor.Identity           (Identity)
 import Data.List.NonEmpty              (NonEmpty((:|)))
 import Data.Int                        (Int8, Int16)
 import Data.Map                        (Map)
+import Data.Proxy                      (Proxy(Proxy))
 import Data.String                     (fromString)
 import Data.Text                       (Text)
 import Data.Validation                 (Validation(Success, Failure))
@@ -73,6 +76,9 @@ data Error
       BadSquash (Json.Value f a) (Json.Value f a)
 
 deriving instance Show Error
+
+type OptionModifier
+  = ByteString -> Req.Url 'Req.Http -> Req.Option 'Req.Http
 
 newtype M g e a =
   M (StateT (Map (Int, Side) (Json.Value VoidF Void))
@@ -149,13 +155,14 @@ sequenceActions s0 f = go s0 Ok
 
 runCommands
   :: RandomGen g
-  => Text -> [Command]
+  => Text -> OptionModifier -> [Command]
   -> RandT g IO (Either (NonEmpty (WithCommand Error)) ())
-runCommands urlPrefix cmds = do
+runCommands urlPrefix modifier cmds = do
   let httpConfig = def
-  let logged = [ (command'always c, first (WithCommand c) $ runCommand' urlPrefix c)
-               | c <- cmds
-               ]
+  let logged =
+        [ (command'always c, first (WithCommand c) $ runCommand' urlPrefix modifier c)
+        | c <- cmds
+        ]
   let evalM (s, g) (M m) =
         runRandT (runReaderT (runEitherT (runStateT m s)) httpConfig) g >>= \case
           (Left e, _)         -> pure (Left e)
@@ -168,26 +175,30 @@ runCommands urlPrefix cmds = do
 
 runCommand'
   :: (AsError e, AsHttpException e, RandomGen g)
-  => Text -> Command -> M g e ()
-runCommand' urlPrefix cmd = do
+  => Text -> OptionModifier -> Command -> M g e ()
+runCommand' urlPrefix modifier cmd = do
   (url, opts) <- buildUrl urlPrefix (command'url cmd)
   case command'method cmd of
     "GET" ->
-      Req.req Req.GET url Req.NoReqBody Req.bsResponse opts
+      Req.req Req.GET url Req.NoReqBody Req.bsResponse
+          (opts <> modifier (Req.httpMethodName (Proxy @Req.GET)) url)
         >>= parseResponse
         >>= verifyResponse (command'id cmd) (command'response_body cmd)
     "POST" -> do
       reqBody <- buildRequestBody (command'id cmd) (command'request_body cmd)
-      Req.req Req.POST url reqBody Req.bsResponse opts
+      Req.req Req.POST url reqBody Req.bsResponse
+          (opts <> modifier (Req.httpMethodName (Proxy @Req.POST)) url)
         >>= parseResponse
         >>= verifyResponse (command'id cmd) (command'response_body cmd)
     "PUT" -> do
       reqBody <- buildRequestBody (command'id cmd) (command'request_body cmd)
-      Req.req Req.PUT url reqBody Req.bsResponse opts
+      Req.req Req.PUT url reqBody Req.bsResponse
+          (opts <> modifier (Req.httpMethodName (Proxy @Req.PUT)) url)
         >>= parseResponse
         >>= verifyResponse (command'id cmd) (command'response_body cmd)
     "DELETE" ->
-      Req.req Req.DELETE url Req.NoReqBody Req.bsResponse opts
+      Req.req Req.DELETE url Req.NoReqBody Req.bsResponse
+          (opts <> modifier (Req.httpMethodName (Proxy @Req.DELETE)) url)
         >>= parseResponse
         >>= verifyResponse (command'id cmd) (command'response_body cmd)
     method ->

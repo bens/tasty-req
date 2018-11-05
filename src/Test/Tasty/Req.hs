@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds  #-}
 {-# LANGUAGE LambdaCase #-}
 
 module Test.Tasty.Req
@@ -22,22 +23,22 @@ import qualified Text.Megaparsec      as P
 import qualified Text.PrettyPrint     as PP
 
 import Test.Tasty.Req.Parse           (parser)
-import Test.Tasty.Req.Runner          (Error(..), WithCommand(..), runCommands)
+import Test.Tasty.Req.Runner          (Error(..), OptionModifier, WithCommand(..), runCommands)
 import Test.Tasty.Req.Types           (Command)
 
-reqTest :: Tasty.TestName -> FilePath -> Text -> Tasty.TestTree
-reqTest testName scriptPath urlPrefix =
-  Tasty.singleTest testName $ ReqTest scriptPath urlPrefix
+reqTest :: Tasty.TestName -> FilePath -> Text -> OptionModifier -> Tasty.TestTree
+reqTest testName scriptPath urlPrefix modifier =
+  Tasty.singleTest testName $ ReqTest scriptPath urlPrefix modifier
 
-data ReqTest = ReqTest FilePath Text
+data ReqTest = ReqTest FilePath Text OptionModifier
 
 instance Tasty.IsTest ReqTest where
-  run options (ReqTest scriptPath urlPrefix) _progress =
-    runIt options scriptPath urlPrefix
+  run options (ReqTest scriptPath urlPrefix modifier) _progress =
+    runIt options scriptPath urlPrefix modifier
   testOptions = pure []
 
-runIt :: Tasty.OptionSet -> FilePath -> Text -> IO Tasty.Result
-runIt _options scriptPath urlPrefix = do
+runIt :: Tasty.OptionSet -> FilePath -> Text -> OptionModifier -> IO Tasty.Result
+runIt _options scriptPath urlPrefix modifier = do
   script <- Text.readFile scriptPath
   let p = parser :: P.ParsecT Void Text Identity [Command]
   try (pure $! P.parse p scriptPath script) >>= \case
@@ -47,7 +48,7 @@ runIt _options scriptPath urlPrefix = do
       pure (Tasty.testFailed (P.errorBundlePretty err))
     Right (Right cmds) -> do
       g <- newStdGen
-      evalRandT (runCommands urlPrefix cmds) g >>= \case
+      evalRandT (runCommands urlPrefix modifier cmds) g >>= \case
         Left errs ->
           pure $ Tasty.testFailed $ render $ PP.vcat $ map PP.vcat
             [ [ ppDoc cmd
