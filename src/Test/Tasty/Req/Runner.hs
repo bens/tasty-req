@@ -228,16 +228,19 @@ buildUrl urlPrefix urlParts = do
 buildRequestBody
   :: (AsError e, RandomGen g)
   => Int
-  -> Maybe (Json.Value NonEmpty (Either Ref Generator))
+  -> Maybe (Json.Value NonEmpty ReqCustom)
   -> M g e Req.ReqBodyBs
 buildRequestBody _ Nothing = pure (Req.ReqBodyBs "")
 buildRequestBody i (Just req) = do
   req'
-    <-  Json.substitute (resolveRef (either Right Left)) req
+    <-  Json.substitute (resolveRef f) req
     >>= Json.substitute instanceGenerator
     >>= squash
   modify (Map.insert (i, Request) req')
   pure (Req.ReqBodyBs (BS.C.pack (PP.render (Json.ppValue absurd req'))))
+  where
+    f (ReqRef ref) = Right ref
+    f (ReqGen gen) = Left gen
 
 responseParser :: P.ParsecT Void Text Identity (Json.Value VoidF Void)
 responseParser = Json.runParser Json.combineVoidF (Json.object <> Json.array) <* P.eof
@@ -253,19 +256,21 @@ parseResponse resp
 verifyResponse
   :: AsError e
   => Int
-  -> Maybe (Json.Value NonEmpty (Either Ref TypeDefn))
+  -> Maybe (Json.Value NonEmpty RespCustom)
   -> Maybe (Json.Value VoidF Void)
   -> M g e ()
-verifyResponse _ Nothing Nothing = pure ()
-verifyResponse i (Just p_x) (Just x) = do
-  p_x'
-    <-  Json.substitute (resolveRef (either Right Left)) p_x
-    >>= squash
-  case verify p_x' x of
-    Failure errs -> throwError (_Error # VerifyFailed errs)
-    Success y    -> modify (Map.insert (i, Response) y)
-verifyResponse _ (Just _) Nothing = throwError (_Error # ExpectedResponse)
-verifyResponse _ Nothing (Just _) = throwError (_Error # UnexpectedResponse)
+verifyResponse i p_val val = case (p_val, val) of
+  (Nothing, Nothing) -> pure ()
+  (Just p_x, Just x) -> do
+    p_x' <- Json.substitute (resolveRef f) p_x >>= squash
+    case verify p_x' x of
+      Failure errs -> throwError (_Error # VerifyFailed errs)
+      Success y    -> modify (Map.insert (i, Response) y)
+  (Just _, Nothing) -> throwError (_Error # ExpectedResponse)
+  (Nothing, Just _) -> throwError (_Error # UnexpectedResponse)
+  where
+    f (RespRef ref)     = Right ref
+    f (RespTypeDefn ty) = Left (Right ty)
 
 resolveRef :: AsError e => (a -> Either b Ref) -> Text -> a -> M g e (Json.Value NonEmpty b)
 resolveRef f nm x = case f x of

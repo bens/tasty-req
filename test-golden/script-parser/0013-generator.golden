@@ -8,13 +8,13 @@
           (JsonObject
              (Object
                 (fromList
-                   [ ( "a" , JsonCustom "g" (Right GenString) )
-                   , ( "b" , JsonCustom "g" (Right GenInteger) )
-                   , ( "c" , JsonCustom "g" (Right GenDouble) )
-                   , ( "d" , JsonCustom "g" (Right GenBool) )
-                   , ( "e" , JsonCustom "g" (Right (GenMaybe GenString)) )
+                   [ ( "a" , JsonCustom "g" (ReqGen GenString) )
+                   , ( "b" , JsonCustom "g" (ReqGen GenInteger) )
+                   , ( "c" , JsonCustom "g" (ReqGen GenDouble) )
+                   , ( "d" , JsonCustom "g" (ReqGen GenBool) )
+                   , ( "e" , JsonCustom "g" (ReqGen (GenMaybe GenString)) )
                    ])))
     , command'response_body =
-        Just (JsonCustom "r" (Left (Ref 1 Request [] (fromList []))))
+        Just (JsonCustom "r" (RespRef (Ref 1 Request [] (fromList []))))
     }
 ]

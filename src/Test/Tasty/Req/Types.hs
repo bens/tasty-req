@@ -7,7 +7,7 @@
 {-# LANGUAGE LambdaCase         #-}
 
 module Test.Tasty.Req.Types
-  ( Command(..)
+  ( ReqCustom(..), RespCustom(..), Command(..)
   , Ref(..), Side(..), Generator(..), TypeDefn(..)
     -- * JSON
   , Value(..), Object(..)
@@ -77,13 +77,23 @@ data TypeDefn
   | TyMaybe TypeDefn
     deriving (Eq, Ord, Show)
 
+data ReqCustom
+  = ReqRef Ref
+  | ReqGen Generator
+    deriving Show
+
+data RespCustom
+  = RespRef Ref
+  | RespTypeDefn TypeDefn
+    deriving Show
+
 data Command = Command
   { command'id            :: Int
   , command'always        :: Bool
   , command'method        :: Text
   , command'url           :: [Either Ref Text]
-  , command'request_body  :: Maybe (Value NonEmpty (Either Ref Generator))
-  , command'response_body :: Maybe (Value NonEmpty (Either Ref TypeDefn))
+  , command'request_body  :: Maybe (Value NonEmpty ReqCustom)
+  , command'response_body :: Maybe (Value NonEmpty RespCustom)
   } deriving Show
 
 -- JSON Values

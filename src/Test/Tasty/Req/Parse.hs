@@ -17,8 +17,7 @@ import qualified Text.Megaparsec.Char.Lexer as P.L
 
 import Test.Tasty.Req.Parse.Common          (ensure1stCol, hspace, lexemeH,
                                              spaces, symbol, symbolH)
-import Test.Tasty.Req.Types                 (Command(..), Generator(..), Ref(..),
-                                             Side(..), TypeDefn(..))
+import Test.Tasty.Req.Types
 
 import qualified Test.Tasty.Req.Parse.JSON  as Json
 
@@ -45,10 +44,10 @@ pGenerator :: Ord e => P.ParsecT e Text m Generator
 pGenerator = term <|> (GenMaybe <$> (symbolH "maybe" *> term))
   where
     term = asum
-      [ GenString <$ symbolH "string"
+      [ GenString  <$ symbolH "string"
       , GenInteger <$ symbolH "integer"
-      , GenDouble <$ symbolH "double"
-      , GenBool   <$ symbolH "boolean"
+      , GenDouble  <$ symbolH "double"
+      , GenBool    <$ symbolH "boolean"
       ]
 
 -- TYPE DEFN
@@ -88,7 +87,9 @@ pCommand = do
   url     <- pUrl <* hspace <* P.C.newline
   request <- optional $
     Json.runParser Json.combineList $
-      let custom = [("r", Left <$> pRef), ("g", Right <$> pGenerator)]
+      let custom = [ ("r", ReqRef <$> pRef)
+                   , ("g", ReqGen <$> pGenerator)
+                   ]
       in Json.combine
          ( Json.withCustom (Json.customParsers custom) Json.object <>
            Json.withCustom (Json.customParsers custom) Json.custom
@@ -97,8 +98,11 @@ pCommand = do
   spaces *> ensure1stCol *> symbol "---"
   expected <- optional $
     Json.runParser Json.combineList $
-      let customA = [("r", Left <$> pRef), ("t", Right <$> pTypeDefn)]
-          customB = [("r", Left <$> pRef)]
+      let customA = [ ("r",    RespRef       <$> pRef)
+                    , ("t",    RespTypeDefn  <$> pTypeDefn)
+                    ]
+          customB = [ ("r", RespRef <$> pRef)
+                    ]
       in Json.combine
          ( Json.withCustom (Json.customParsers customA) Json.object <>
            Json.withCustom (Json.customParsers customB) Json.custom

@@ -25,13 +25,14 @@
           (JsonCombine
              (JsonCustom
                 "r"
-                (Left
+                (RespRef
                    (Ref 1 Request [ Right "x" , Left 0 ] (fromList [ "a" , "b" ]))) :|
                 [ JsonObject
                     (Object
                        (fromList
                           [ ( "b"
-                            , JsonCustom "r" (Left (Ref 1 Request [ Right "a" ] (fromList [])))
+                            , JsonCustom
+                                "r" (RespRef (Ref 1 Request [ Right "a" ] (fromList [])))
                             )
                           ]))
                 ]))
