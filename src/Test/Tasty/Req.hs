@@ -7,6 +7,7 @@ module Test.Tasty.Req
 import Control.Monad.Random           (evalRandT)
 import Control.Exception              (SomeException, try)
 import Data.Functor.Identity          (Identity)
+import Data.List.NonEmpty              (NonEmpty((:|)))
 import Data.Text                      (Text)
 import Data.Void                      (Void)
 import System.Random                  (newStdGen)
@@ -45,9 +46,9 @@ runIt _options scriptPath urlPrefix = do
     Right (Right cmds) -> do
       g <- newStdGen
       evalRandT (runCommands urlPrefix cmds) g >>= \case
-        Left (WithCommand cmd (HttpE (Req.VanillaHttpException exc))) ->
+        Left (WithCommand cmd (HttpE (Req.VanillaHttpException exc)):|_) ->
           pure $ Tasty.testFailed (ppShow (cmd, exc))
-        Left (WithCommand cmd err) ->
+        Left (WithCommand cmd err:|_) ->
           pure $ Tasty.testFailed (ppShow (cmd, err))
         Right () ->
           pure $ Tasty.testPassed ""

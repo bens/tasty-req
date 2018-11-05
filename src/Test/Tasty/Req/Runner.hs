@@ -16,21 +16,22 @@ module Test.Tasty.Req.Runner
     runCommands, responseParser
   ) where
 
+import Control.Exception               (SomeException, catch, throwIO)
 import Control.Lens                    (Prism', (#), prism', review)
 import Control.Monad                   (unless)
 import Control.Monad.Except            (MonadError, catchError, throwError)
 import Control.Monad.IO.Class          (MonadIO)
-import Control.Monad.Random            (RandT)
+import Control.Monad.Random            (RandT, liftRandT, runRandT)
 import Control.Monad.Random.Class      (MonadRandom, getRandom)
 import Control.Monad.State             (MonadState, gets, modify, state)
 import Control.Monad.Trans.Class       (lift)
 import Control.Monad.Trans.Either      (EitherT, left, mapEitherT, runEitherT)
 import Control.Monad.Trans.Reader      (ReaderT, ask, runReaderT)
-import Control.Monad.Trans.State       (StateT(StateT), evalStateT, runStateT)
+import Control.Monad.Trans.State       (StateT(StateT), runStateT)
 import Data.Bifunctor                  (Bifunctor, bimap, first)
 import Data.Default                    (def)
 import Data.Functor.Identity           (Identity)
-import Data.List.NonEmpty              (NonEmpty)
+import Data.List.NonEmpty              (NonEmpty((:|)))
 import Data.Int                        (Int8, Int16)
 import Data.Map                        (Map)
 import Data.String                     (fromString)
@@ -112,17 +113,58 @@ instance AsHttpException e => Req.MonadHttp (M g e) where
   handleHttpException = M . lift . left . review _HttpException
   getHttpConfig = M (lift $ lift ask)
 
+data FailureMode e
+  = Ok
+  | Failed (NonEmpty e)
+  | Thrown SomeException
+
+sequenceActions
+  :: s -> (s -> m () -> IO (Either e s))
+  -> [(Bool, m ())]
+  -> IO (Either (NonEmpty e) (), s)
+sequenceActions s0 f = go s0 Ok
+  where
+    go s Ok [] =
+      pure (Right (), s)
+    go s (Failed es) [] =
+      pure (Left es, s)
+    go _ (Thrown exc) [] =
+      throwIO exc
+    go s Ok ((_, m):ms) =
+      f s m `catch` continue s ms Thrown >>= \case
+        Left  e  -> go s  (Failed (e:|[])) ms
+        Right s' -> go s' Ok ms
+    go s (Failed es) ((True, m):ms) =
+      f s m `catch` continue s ms (const $ Failed es) >>= \case
+        Left  e  -> go s  (Failed (es <> (e:|[]))) ms
+        Right s' -> go s' (Failed es) ms
+    go s (Thrown exc) ((True, m):ms) =
+      f s m `catch` continue s ms (const $ Thrown exc) >>= \case
+        Left  _  -> go s  (Thrown exc) ms
+        Right s' -> go s' (Thrown exc) ms
+    go s errs ((False, _):ms) =
+      go s errs ms
+    continue s ms failed exc =
+      go s (failed exc) ms >> undefined
+
 runCommands
   :: RandomGen g
   => Text -> [Command]
-  -> RandT g IO (Either (WithCommand Error) ())
+  -> RandT g IO (Either (NonEmpty (WithCommand Error)) ())
 runCommands urlPrefix cmds = do
   let httpConfig = def
   let logged = [ (command'always c, first (WithCommand c) $ runCommand' urlPrefix c)
                | c <- cmds
                ]
-  case mapM_ snd logged of
-    M m -> runReaderT (runEitherT (evalStateT m Map.empty)) httpConfig
+  let evalM (s, g) (M m) =
+        runRandT (runReaderT (runEitherT (runStateT m s)) httpConfig) g >>= \case
+          (Left e, _)         -> pure (Left e)
+          (Right ((), x), g') -> pure (Right (x, g'))
+  liftRandT $ \g -> do
+    (r, (_, g')) <- sequenceActions (Map.empty, g) evalM logged
+    case r of
+      Left e -> pure (Left e, g')
+      Right () -> pure (Right (), g')
 
 runCommand'
   :: (AsError e, AsHttpException e, RandomGen g)
