@@ -4,20 +4,22 @@ module Test.Tasty.Req
   ( reqTest
   ) where
 
-import Control.Monad.Random           (evalRandT)
 import Control.Exception              (SomeException, try)
+import Control.Monad.Random           (evalRandT)
+import Data.Foldable                  (toList)
 import Data.Functor.Identity          (Identity)
-import Data.List.NonEmpty              (NonEmpty((:|)))
 import Data.Text                      (Text)
 import Data.Void                      (Void)
 import System.Random                  (newStdGen)
-import Text.Show.Pretty               (ppShow)
+import Text.Show.Pretty               (ppDoc)
+import Text.PrettyPrint               (nest, render)
 
 import qualified Data.Text.IO         as Text
 import qualified Network.HTTP.Req     as Req
 import qualified Test.Tasty.Options   as Tasty
 import qualified Test.Tasty.Providers as Tasty
 import qualified Text.Megaparsec      as P
+import qualified Text.PrettyPrint     as PP
 
 import Test.Tasty.Req.Parse           (parser)
 import Test.Tasty.Req.Runner          (Error(..), WithCommand(..), runCommands)
@@ -40,15 +42,21 @@ runIt _options scriptPath urlPrefix = do
   let p = parser :: P.ParsecT Void Text Identity [Command]
   try (pure $! P.parse p scriptPath script) >>= \case
     Left exc ->
-      pure (Tasty.testFailed (ppShow (exc :: SomeException)))
+      pure (Tasty.testFailed (render $ ppDoc (exc :: SomeException)))
     Right (Left err) ->
       pure (Tasty.testFailed (P.errorBundlePretty err))
     Right (Right cmds) -> do
       g <- newStdGen
       evalRandT (runCommands urlPrefix cmds) g >>= \case
-        Left (WithCommand cmd (HttpE (Req.VanillaHttpException exc)):|_) ->
-          pure $ Tasty.testFailed (ppShow (cmd, exc))
-        Left (WithCommand cmd err:|_) ->
-          pure $ Tasty.testFailed (ppShow (cmd, err))
+        Left errs ->
+          pure $ Tasty.testFailed $ render $ PP.vcat $ map PP.vcat
+            [ [ ppDoc cmd
+              , PP.text "Error:"
+              , nest 4 $ case err of
+                  HttpE (Req.VanillaHttpException exc) -> ppDoc exc
+                  _ -> ppDoc err
+              ]
+            | WithCommand cmd err <- toList errs
+            ]
         Right () ->
           pure $ Tasty.testPassed ""
