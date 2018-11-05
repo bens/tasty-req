@@ -5,6 +5,7 @@ module Test.Tasty.Req.Verify
   ) where
 
 import Control.Monad             (unless)
+import Data.AEq                  ((~==))
 import Data.String               (fromString)
 import Data.Text                 (Text)
 import Data.Traversable          (for)
@@ -38,7 +39,7 @@ verify = goValue []
       (JsonFalse      , JsonFalse     ) -> pure val
       (JsonText    p_x, JsonText     x) | p_x == x -> pure val
       (JsonInteger p_n, JsonInteger  n) | p_n == n -> pure val
-      (JsonDouble  p_n, JsonDouble   n) | p_n == n -> pure val
+      (JsonDouble  p_n, JsonDouble   n) | p_n ~== n -> pure val
       (JsonDouble  p_n, JsonInteger  n) | p_n == fromIntegral n -> pure (JsonDouble p_n)
       (JsonObject  p_o, JsonObject   o) -> JsonObject <$> goObject path p_o o
       (JsonArray  p_xs, JsonArray   xs) -> JsonArray <$> goArray path p_xs xs

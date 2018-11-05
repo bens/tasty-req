@@ -30,6 +30,7 @@ common deps
     containers          >= 0.5.11,
     data-default        >= 0.7.1,
     http-client         >= 0.5.13,
+    ieee754             >= 0.8.0,
     lens                >= 4.17,
     megaparsec          >= 7.0.1,
     MonadRandom         >= 0.5.1,
