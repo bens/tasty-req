@@ -21,10 +21,11 @@ import Test.Tasty.Req.Types      (TypeDefn(..), VoidF, absurdF)
 import qualified Test.Tasty.Req.Parse.JSON as Json
 
 data Mismatch
-  = WrongValue     [Text] (Json.Value VoidF TypeDefn) (Json.Value VoidF Void)
-  | WrongType      [Text] TypeDefn (Json.Value VoidF Void)
-  | UnexpectedKeys [Text] [Text]
-  | MissingKeys    [Text] [Text]
+  = WrongValue          [Text] (Json.Value VoidF TypeDefn) (Json.Value VoidF Void)
+  | WrongType           [Text] TypeDefn (Json.Value VoidF Void)
+  | UnexpectedKeys      [Text] [Text]
+  | MissingKeys         [Text] [Text]
+  | ArrayLengthMismatch [Text] Int Int
     deriving (Eq, Show)
 
 verify
@@ -76,9 +77,16 @@ verify = goValue []
       -> [Json.Value VoidF TypeDefn]
       -> [Json.Value VoidF Void]
       -> Validation [Mismatch] [Json.Value VoidF Void]
-    goArray path p_xs xs =
-        traverse (\(i, p_x, x) -> goValue (path ++ [fromString (show i)]) p_x x)
-          (zip3 [(0::Int)..] p_xs xs)
+    goArray path p_xs xs = checkElems <* checkLength
+      where
+        checkLength =
+          let p_xs_len = length p_xs
+              xs_len   = length xs
+          in unless (p_xs_len == xs_len) $
+               Failure [ArrayLengthMismatch path p_xs_len xs_len]
+        checkElems =
+          traverse (\(i, p_x, x) -> goValue (path ++ [fromString (show i)]) p_x x)
+            (zip3 [(0::Int)..] p_xs xs)
 
     goWildcard
       :: [Text]
