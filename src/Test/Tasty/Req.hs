@@ -26,14 +26,15 @@ import Test.Tasty.Req.Parse           (parser)
 import Test.Tasty.Req.Runner          (Error(..), OptionModifier, WithCommand(..), runCommands)
 import Test.Tasty.Req.Types           (Command)
 
-reqTest :: Tasty.TestName -> FilePath -> Text -> OptionModifier -> Tasty.TestTree
-reqTest testName scriptPath urlPrefix modifier =
-  Tasty.singleTest testName $ ReqTest scriptPath urlPrefix modifier
+reqTest :: Tasty.TestName -> FilePath -> IO Text -> OptionModifier -> Tasty.TestTree
+reqTest testName scriptPath getUrlPrefix modifier =
+  Tasty.singleTest testName $ ReqTest scriptPath getUrlPrefix modifier
 
-data ReqTest = ReqTest FilePath Text OptionModifier
+data ReqTest = ReqTest FilePath (IO Text) OptionModifier
 
 instance Tasty.IsTest ReqTest where
-  run options (ReqTest scriptPath urlPrefix modifier) _progress =
+  run options (ReqTest scriptPath getUrlPrefix modifier) _progress = do
+    urlPrefix <- getUrlPrefix
     runIt options scriptPath urlPrefix modifier
   testOptions = pure []
 
