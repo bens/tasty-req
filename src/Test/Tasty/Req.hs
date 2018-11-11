@@ -5,15 +5,15 @@ module Test.Tasty.Req
   ( reqTest
   ) where
 
-import Control.Exception              (SomeException, try)
-import Control.Monad.Random           (evalRandT)
-import Data.Foldable                  (toList)
-import Data.Functor.Identity          (Identity)
-import Data.Text                      (Text)
-import Data.Void                      (Void)
-import System.Random                  (newStdGen)
-import Text.Show.Pretty               (ppDoc)
-import Text.PrettyPrint               (nest, render)
+import Control.Exception     (SomeException, try)
+import Control.Monad.Random  (evalRandT)
+import Data.Foldable         (toList)
+import Data.Functor.Identity (Identity)
+import Data.Text             (Text)
+import Data.Void             (Void)
+import System.Random         (newStdGen)
+import Text.PrettyPrint      (nest, render)
+import Text.Show.Pretty      (ppDoc)
 
 import qualified Data.Text.IO         as Text
 import qualified Network.HTTP.Req     as Req
@@ -22,9 +22,9 @@ import qualified Test.Tasty.Providers as Tasty
 import qualified Text.Megaparsec      as P
 import qualified Text.PrettyPrint     as PP
 
-import Test.Tasty.Req.Parse           (parser)
-import Test.Tasty.Req.Runner          (Error(..), OptionModifier, WithCommand(..), runCommands)
-import Test.Tasty.Req.Types           (Command)
+import Test.Tasty.Req.Parse  (parser)
+import Test.Tasty.Req.Runner (Error(..), OptionModifier, WithCommand(..), runCommands)
+import Test.Tasty.Req.Types  (Command)
 
 reqTest :: Tasty.TestName -> FilePath -> IO Text -> OptionModifier -> Tasty.TestTree
 reqTest testName scriptPath getUrlPrefix modifier =
@@ -56,7 +56,7 @@ runIt _options scriptPath urlPrefix modifier = do
               , PP.text "Error:"
               , nest 4 $ case err of
                   HttpE (Req.VanillaHttpException exc) -> ppDoc exc
-                  _ -> ppDoc err
+                  _                                    -> ppDoc err
               ]
             | WithCommand cmd err <- toList errs
             ]

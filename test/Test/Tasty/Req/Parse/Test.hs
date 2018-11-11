@@ -4,22 +4,22 @@ module Test.Tasty.Req.Parse.Test
   ( mkScriptTests, mkJsonTests
   ) where
 
-import Control.Exception         (SomeException, try)
-import Data.Functor.Identity     (Identity)
-import Control.Monad             (forM)
-import Data.List                 (sort)
-import Data.Text                 (Text)
-import Data.Void                 (Void)
-import System.FilePath           (replaceExtension)
-import Test.Tasty                (TestTree, testGroup)
-import Test.Tasty.Golden         (findByExtension, goldenVsFileDiff)
-import Text.Show.Pretty          (ppShow)
+import Control.Exception     (SomeException, try)
+import Control.Monad         (forM)
+import Data.Functor.Identity (Identity)
+import Data.List             (sort)
+import Data.Text             (Text)
+import Data.Void             (Void)
+import System.FilePath       (replaceExtension)
+import Test.Tasty            (TestTree, testGroup)
+import Test.Tasty.Golden     (findByExtension, goldenVsFileDiff)
+import Text.Show.Pretty      (ppShow)
 
 import qualified Data.Text.IO    as Text
 import qualified Text.Megaparsec as P
 
-import Test.Tasty.Req.Parse      (parser)
-import Test.Tasty.Req.Types      (Command, VoidF)
+import Test.Tasty.Req.Parse (parser)
+import Test.Tasty.Req.Types (Command, VoidF)
 
 import qualified Test.Tasty.Req.Parse.JSON as Json
 import qualified Test.Tasty.Req.Runner     as Runner

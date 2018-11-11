@@ -17,31 +17,31 @@ module Test.Tasty.Req.Runner
     runCommands, responseParser
   ) where
 
-import Control.Exception               (SomeException, catch, throwIO)
-import Control.Lens                    (Prism', (#), prism', review)
-import Control.Monad                   (unless)
-import Control.Monad.Except            (MonadError, catchError, throwError)
-import Control.Monad.IO.Class          (MonadIO)
-import Control.Monad.Random            (RandT, liftRandT, runRandT)
-import Control.Monad.Random.Class      (MonadRandom, getRandom)
-import Control.Monad.State             (MonadState, gets, modify, state)
-import Control.Monad.Trans.Class       (lift)
-import Control.Monad.Trans.Either      (EitherT, left, mapEitherT, runEitherT)
-import Control.Monad.Trans.Reader      (ReaderT, ask, runReaderT)
-import Control.Monad.Trans.State       (StateT(StateT), runStateT)
-import Data.Bifunctor                  (Bifunctor, bimap, first)
-import Data.ByteString.Char8           (ByteString)
-import Data.Default                    (def)
-import Data.Functor.Identity           (Identity)
-import Data.List.NonEmpty              (NonEmpty((:|)))
-import Data.Int                        (Int8, Int16)
-import Data.Map                        (Map)
-import Data.Proxy                      (Proxy(Proxy))
-import Data.String                     (fromString)
-import Data.Text                       (Text)
-import Data.Validation                 (Validation(Success, Failure))
-import Data.Void                       (Void, absurd)
-import System.Random                   (RandomGen)
+import Control.Exception          (SomeException, catch, throwIO)
+import Control.Lens               (Prism', prism', review, ( # ))
+import Control.Monad              (unless)
+import Control.Monad.Except       (MonadError, catchError, throwError)
+import Control.Monad.IO.Class     (MonadIO)
+import Control.Monad.Random       (RandT, liftRandT, runRandT)
+import Control.Monad.Random.Class (MonadRandom, getRandom)
+import Control.Monad.State        (MonadState, gets, modify, state)
+import Control.Monad.Trans.Class  (lift)
+import Control.Monad.Trans.Either (EitherT, left, mapEitherT, runEitherT)
+import Control.Monad.Trans.Reader (ReaderT, ask, runReaderT)
+import Control.Monad.Trans.State  (StateT(StateT), runStateT)
+import Data.Bifunctor             (Bifunctor, bimap, first)
+import Data.ByteString.Char8      (ByteString)
+import Data.Default               (def)
+import Data.Functor.Identity      (Identity)
+import Data.Int                   (Int16, Int8)
+import Data.List.NonEmpty         (NonEmpty((:|)))
+import Data.Map                   (Map)
+import Data.Proxy                 (Proxy(Proxy))
+import Data.String                (fromString)
+import Data.Text                  (Text)
+import Data.Validation            (Validation(Failure, Success))
+import Data.Void                  (Void, absurd)
+import System.Random              (RandomGen)
 
 import qualified Data.ByteString.Char8 as BS.C
 import qualified Data.Map              as Map
@@ -53,7 +53,7 @@ import qualified Text.Megaparsec       as P
 import qualified Text.PrettyPrint      as PP
 
 import Test.Tasty.Req.Types
-import Test.Tasty.Req.Verify           (Mismatch(..), verify)
+import Test.Tasty.Req.Verify (Mismatch(..), verify)
 
 import qualified Test.Tasty.Req.Parse.JSON as Json
 
@@ -170,7 +170,7 @@ runCommands urlPrefix modifier cmds = do
   liftRandT $ \g -> do
     (r, (_, g')) <- sequenceActions (Map.empty, g) evalM logged
     case r of
-      Left e -> pure (Left e, g')
+      Left e   -> pure (Left e, g')
       Right () -> pure (Right (), g')
 
 runCommand'
@@ -222,7 +222,7 @@ buildUrl urlPrefix urlParts = do
         x                  -> throwError (_Error # NonUrlReference x)
   urlText <- f urlPrefix urlParts
   case Req.parseUrlHttp (Text.encodeUtf8 urlText) of
-    Nothing -> throwError (_Error # NoUrlParse urlText)
+    Nothing          -> throwError (_Error # NoUrlParse urlText)
     Just (url, opts) -> pure (url, opts)
 
 buildRequestBody
@@ -295,8 +295,8 @@ deref ref@(Ref i side path0 sans) = do
     go [] o = pure o
     go (Left j:path) (Json.JsonArray xs) =
       case drop j xs of
-        o':_    -> go path o'
-        []      -> throwError (_Error # BadReference ref)
+        o':_ -> go path o'
+        []   -> throwError (_Error # BadReference ref)
     go (Right k:path) (Json.JsonObject (Json.Object o)) =
       case Map.lookup k o of
         Just o' -> go path o'
@@ -319,4 +319,4 @@ squash
 squash = Json.elimCombine f
   where
     f (Json.JsonObject a) (Json.JsonObject b) = pure (Json.JsonObject (a <> b))
-    f x y = throwError (_Error # BadSquash x y)
+    f x y                                     = throwError (_Error # BadSquash x y)

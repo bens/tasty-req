@@ -4,18 +4,18 @@ module Test.Tasty.Req.Verify
   ( Mismatch(..), verify
   ) where
 
-import Control.Monad             (unless)
-import Data.AEq                  ((~==))
-import Data.String               (fromString)
-import Data.Text                 (Text)
-import Data.Traversable          (for)
-import Data.Validation           (Validation(Failure))
-import Data.Void                 (Void, absurd)
+import Control.Monad    (unless)
+import Data.AEq         ((~==))
+import Data.String      (fromString)
+import Data.Text        (Text)
+import Data.Traversable (for)
+import Data.Validation  (Validation(Failure))
+import Data.Void        (Void, absurd)
 
-import qualified Data.Map        as Map
-import qualified Data.Set        as Set
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 
-import Test.Tasty.Req.Parse.JSON (Value(..), Object(..))
+import Test.Tasty.Req.Parse.JSON (Object(..), Value(..))
 import Test.Tasty.Req.Types      (TypeDefn(..), VoidF, absurdF)
 
 import qualified Test.Tasty.Req.Parse.JSON as Json

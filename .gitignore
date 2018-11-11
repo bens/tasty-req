@@ -1,0 +1,8 @@
+*~
+dist-newstyle/
+dist/
+test-golden/**/*.out
+*.hi
+*.o
+/cabal.project.local
+/.ghc.environment*

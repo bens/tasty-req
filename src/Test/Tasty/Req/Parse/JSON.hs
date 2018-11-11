@@ -6,12 +6,12 @@
   type parameters respectively to 'Void' and 'VoidF'.
 -}
 
-{-# LANGUAGE DeriveFunctor      #-}
-{-# LANGUAGE FlexibleContexts   #-}
-{-# LANGUAGE LambdaCase         #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE RankNTypes         #-}
-{-# LANGUAGE TupleSections      #-}
+{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Test.Tasty.Req.Parse.JSON
   ( -- * JSON Values
@@ -32,15 +32,15 @@ module Test.Tasty.Req.Parse.JSON
   ) where
 
 import Control.Applicative
-import Control.Monad                  (foldM)
-import Data.Char                      (chr, isDigit, isHexDigit, isLower, isUpper, ord)
-import Data.Foldable                  (asum, toList)
-import Data.List                      (foldl', intersperse, sort)
-import Data.List.NonEmpty             (NonEmpty((:|)))
-import Data.Map                       (Map)
-import Data.Maybe                     (fromMaybe)
-import Data.Semigroup                 (sconcat)
-import Data.Text                      (Text)
+import Control.Monad       (foldM)
+import Data.Char           (chr, isDigit, isHexDigit, isLower, isUpper, ord)
+import Data.Foldable       (asum, toList)
+import Data.List           (foldl', intersperse, sort)
+import Data.List.NonEmpty  (NonEmpty((:|)))
+import Data.Map            (Map)
+import Data.Maybe          (fromMaybe)
+import Data.Semigroup      (sconcat)
+import Data.Text           (Text)
 
 import qualified Data.Map             as Map
 import qualified Data.Text            as Text

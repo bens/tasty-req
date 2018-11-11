@@ -5,21 +5,21 @@ module Test.Tasty.Req.Parse
   ( parser
   ) where
 
-import Control.Applicative                  ((<|>), many, optional, some)
-import Data.Char                            (isAlphaNum, isUpper)
-import Data.Foldable                        (asum)
-import Data.Text                            (Text)
+import Control.Applicative (many, optional, some, (<|>))
+import Data.Char           (isAlphaNum, isUpper)
+import Data.Foldable       (asum)
+import Data.Text           (Text)
 
 import qualified Data.Set                   as Set
 import qualified Text.Megaparsec            as P
 import qualified Text.Megaparsec.Char       as P.C
 import qualified Text.Megaparsec.Char.Lexer as P.L
 
-import Test.Tasty.Req.Parse.Common          (ensure1stCol, hspace, lexemeH,
-                                             spaces, symbol, symbolH)
+import Test.Tasty.Req.Parse.Common
+  (ensure1stCol, hspace, lexemeH, spaces, symbol, symbolH)
 import Test.Tasty.Req.Types
 
-import qualified Test.Tasty.Req.Parse.JSON  as Json
+import qualified Test.Tasty.Req.Parse.JSON as Json
 
 parser :: Ord e => P.ParsecT e Text m [Command]
 parser = spaces *> many pCommand <* P.eof

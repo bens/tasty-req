@@ -1,0 +1,1 @@
+-c="ghci tasty-req:lib:tasty-req tasty-req:tests -fobject-code" -T main

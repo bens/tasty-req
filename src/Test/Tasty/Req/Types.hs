@@ -1,10 +1,10 @@
-{-# LANGUAGE DeriveFunctor      #-}
-{-# LANGUAGE DeriveFoldable     #-}
-{-# LANGUAGE DeriveTraversable  #-}
-{-# LANGUAGE EmptyCase          #-}
-{-# LANGUAGE EmptyDataDecls     #-}
+{-# LANGUAGE DeriveFoldable             #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE EmptyCase                  #-}
+{-# LANGUAGE EmptyDataDecls             #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase         #-}
+{-# LANGUAGE LambdaCase                 #-}
 
 module Test.Tasty.Req.Types
   ( ReqCustom(..), RespCustom(..), Command(..)

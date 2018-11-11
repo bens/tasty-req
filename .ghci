@@ -1,0 +1,2 @@
+:set -isrc -itest
+:load test/Main.hs src/Test/Tasty/Req.hs
