@@ -4,16 +4,24 @@
     , command'method = "POST"
     , command'url = [ Right "/" ]
     , command'request_body =
-        Just (JsonObject (Object (fromList [ ( "a" , JsonInteger 0 ) ])))
+        Just
+          (M (C (InR
+                   (ObjectF (fromList [ ( "a" , M (C (InR (IntF 0))) [] ) ]))))
+             [])
     , command'response_body =
         Just
-          (JsonObject
-             (Object
-                (fromList
-                   [ ( "b"
-                     , JsonCustom
-                         "r" (RespRef (Ref 1 Request [ Right "a" ] (fromList [])))
-                     )
-                   ])))
+          (M (C (InR
+                   (ObjectF
+                      (fromList
+                         [ ( "b"
+                           , M (C (InL
+                                     (Const
+                                        ( "r"
+                                        , RespRef (Ref 1 Request [ Right "a" ] (fromList []))
+                                        ))))
+                               []
+                           )
+                         ]))))
+             [])
     }
 ]

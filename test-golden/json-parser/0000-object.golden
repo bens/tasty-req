@@ -1,1 +1,1 @@
-JsonObject (Object (fromList [ ( "a" , JsonNull ) ]))
+ObjectF (fromList [ ( "a" , NullF ) ])

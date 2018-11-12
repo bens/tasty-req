@@ -5,36 +5,45 @@
     , command'url = [ Right "/" ]
     , command'request_body =
         Just
-          (JsonObject
-             (Object
-                (fromList
-                   [ ( "x"
-                     , JsonArray
-                         [ JsonObject
-                             (Object
-                                (fromList
-                                   [ ( "a" , JsonInteger 0 )
-                                   , ( "b" , JsonInteger 1 )
-                                   , ( "c" , JsonInteger 2 )
-                                   ]))
-                         ]
-                     )
-                   ])))
+          (M (C (InR
+                   (ObjectF
+                      (fromList
+                         [ ( "x"
+                           , M (C (InR
+                                     (ArrayF
+                                        [ M (C (InR
+                                                  (ObjectF
+                                                     (fromList
+                                                        [ ( "a" , M (C (InR (IntF 0))) [] )
+                                                        , ( "b" , M (C (InR (IntF 1))) [] )
+                                                        , ( "c" , M (C (InR (IntF 2))) [] )
+                                                        ]))))
+                                            []
+                                        ])))
+                               []
+                           )
+                         ]))))
+             [])
     , command'response_body =
         Just
-          (JsonCombine
-             (JsonCustom
-                "r"
-                (RespRef
-                   (Ref 1 Request [ Right "x" , Left 0 ] (fromList [ "a" , "b" ]))) :|
-                [ JsonObject
-                    (Object
+          (M (C (InL
+                   (Const
+                      ( "r"
+                      , RespRef
+                          (Ref 1 Request [ Right "x" , Left 0 ] (fromList [ "a" , "b" ]))
+                      ))))
+             [ C (InR
+                    (ObjectF
                        (fromList
                           [ ( "b"
-                            , JsonCustom
-                                "r" (RespRef (Ref 1 Request [ Right "a" ] (fromList [])))
+                            , M (C (InL
+                                      (Const
+                                         ( "r"
+                                         , RespRef (Ref 1 Request [ Right "a" ] (fromList []))
+                                         ))))
+                                []
                             )
-                          ]))
-                ]))
+                          ])))
+             ])
     }
 ]

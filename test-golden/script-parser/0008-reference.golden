@@ -5,6 +5,9 @@
     , command'url = [ Right "/" ]
     , command'request_body = Nothing
     , command'response_body =
-        Just (JsonCustom "r" (RespRef (Ref 1 Response [] (fromList []))))
+        Just
+          (M (C (InL
+                   (Const ( "r" , RespRef (Ref 1 Response [] (fromList [])) ))))
+             [])
     }
 ]

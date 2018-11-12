@@ -5,36 +5,62 @@
     , command'url = [ Right "/" ]
     , command'request_body =
         Just
-          (JsonArray
-             [ JsonObject (Object (fromList [ ( "foo" , JsonInteger 123 ) ]))
-             , JsonObject
-                 (Object
-                    (fromList
-                       [ ( "bar"
-                         , JsonObject (Object (fromList [ ( "abc" , JsonNull ) ]))
-                         )
-                       ]))
-             ])
+          (M (C (InR
+                   (ArrayF
+                      [ M (C (InR
+                                (ObjectF (fromList [ ( "foo" , M (C (InR (IntF 123))) [] ) ]))))
+                          []
+                      , M (C (InR
+                                (ObjectF
+                                   (fromList
+                                      [ ( "bar"
+                                        , M (C (InR
+                                                  (ObjectF
+                                                     (fromList
+                                                        [ ( "abc" , M (C (InR NullF)) [] ) ]))))
+                                            []
+                                        )
+                                      ]))))
+                          []
+                      ])))
+             [])
     , command'response_body =
         Just
-          (JsonArray
-             [ JsonObject
-                 (Object
-                    (fromList
-                       [ ( "bib"
-                         , JsonCombine
-                             (JsonCustom
-                                "r" (RespRef (Ref 1 Request [ Left 0 ] (fromList []))) :|
-                                [ JsonObject (Object (fromList [ ( "uff" , JsonInteger 987 ) ])) ])
-                         )
-                       , ( "bob"
-                         , JsonCustom
-                             "r"
-                             (RespRef
-                                (Ref
-                                   1 Request [ Left 1 , Right "bar" , Right "abc" ] (fromList [])))
-                         )
-                       ]))
-             ])
+          (M (C (InR
+                   (ArrayF
+                      [ M (C (InR
+                                (ObjectF
+                                   (fromList
+                                      [ ( "bib"
+                                        , M (C (InL
+                                                  (Const
+                                                     ( "r"
+                                                     , RespRef
+                                                         (Ref 1 Request [ Left 0 ] (fromList []))
+                                                     ))))
+                                            [ C (InR
+                                                   (ObjectF
+                                                      (fromList
+                                                         [ ( "uff" , M (C (InR (IntF 987))) [] )
+                                                         ])))
+                                            ]
+                                        )
+                                      , ( "bob"
+                                        , M (C (InL
+                                                  (Const
+                                                     ( "r"
+                                                     , RespRef
+                                                         (Ref
+                                                            1
+                                                            Request
+                                                            [ Left 1 , Right "bar" , Right "abc" ]
+                                                            (fromList []))
+                                                     ))))
+                                            []
+                                        )
+                                      ]))))
+                          []
+                      ])))
+             [])
     }
 ]

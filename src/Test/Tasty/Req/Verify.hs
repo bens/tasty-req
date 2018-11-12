@@ -4,25 +4,25 @@ module Test.Tasty.Req.Verify
   ( Mismatch(..), verify
   ) where
 
-import Control.Monad    (unless)
-import Data.AEq         ((~==))
-import Data.String      (fromString)
-import Data.Text        (Text)
-import Data.Traversable (for)
-import Data.Validation  (Validation(Failure))
-import Data.Void        (Void, absurd)
+import Control.Monad      (unless)
+import Control.Recursion  (Fix(..))
+import Data.AEq           ((~==))
+import Data.Functor.Const (Const(..))
+import Data.Functor.Sum   (Sum(..))
+import Data.Map           (Map)
+import Data.String        (fromString)
+import Data.Text          (Text)
+import Data.Traversable   (for)
+import Data.Validation    (Validation(Failure))
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
-import Test.Tasty.Req.Parse.JSON (Object(..), Value(..))
-import Test.Tasty.Req.Types      (TypeDefn(..), VoidF, absurdF)
-
-import qualified Test.Tasty.Req.Parse.JSON as Json
+import Test.Tasty.Req.Types
 
 data Mismatch
-  = WrongValue          [Text] (Json.Value VoidF (Either () TypeDefn)) (Json.Value VoidF Void)
-  | WrongType           [Text] TypeDefn (Json.Value VoidF Void)
+  = WrongValue          [Text] (Fix (CustomF TypeDefn)) Json
+  | WrongType           [Text] TypeDefn Json
   | UnexpectedKeys      [Text] [Text]
   | MissingKeys         [Text] [Text]
   | ArrayLengthMismatch [Text] Int Int
@@ -36,39 +36,35 @@ data Mismatch
 -- many times, to verify the entire array that it sits within.
 
 verify
-  :: Json.Value VoidF (Either () TypeDefn)
-  -> Json.Value VoidF Void
-  -> Validation [Mismatch] (Json.Value VoidF Void)
+  :: Fix (CustomF TypeDefn)
+  -> Json
+  -> Validation [Mismatch] Json
 verify = vValue []
 
 vValue
   :: [Text]
-  -> Json.Value VoidF (Either () TypeDefn)
-  -> Json.Value VoidF Void
-  -> Validation [Mismatch] (Json.Value VoidF Void)
+  -> Fix (CustomF TypeDefn)
+  -> Json
+  -> Validation [Mismatch] Json
 vValue path pat val = case (pat, val) of
-  (JsonNull       , JsonNull      ) -> pure val
-  (JsonTrue       , JsonTrue      ) -> pure val
-  (JsonFalse      , JsonFalse     ) -> pure val
-  (JsonText    p_x, JsonText     x) | p_x == x -> pure val
-  (JsonInteger p_n, JsonInteger  n) | p_n == n -> pure val
-  (JsonDouble  p_n, JsonDouble   n) | p_n ~== n -> pure val
-  (JsonDouble  p_n, JsonInteger  n) | p_n == fromIntegral n -> pure (JsonDouble p_n)
-  (JsonObject  p_o, JsonObject   o) -> JsonObject <$> vObject path p_o  o
-  (JsonArray  p_xs, JsonArray   xs) -> JsonArray  <$> vArray  path p_xs xs
-  (JsonCustom _ ty,              _) -> vCustom path ty val
-  (              _, JsonCustom _ x) -> absurd x
-  (JsonCombine p_x,              _) -> absurdF p_x
-  (              _, JsonCombine  x) -> absurdF x
-  (              _,              _) -> Failure [WrongValue path pat val]
+  (Fix (C (InR    NullF       )), Fix    NullF    ) -> pure val
+  (Fix (C (InR    TrueF       )), Fix    TrueF    ) -> pure val
+  (Fix (C (InR   FalseF       )), Fix   FalseF    ) -> pure val
+  (Fix (C (InR (  TextF   p_x))), Fix   (TextF  x)) | p_x == x -> pure val
+  (Fix (C (InR (   IntF   p_n))), Fix    (IntF  n)) | p_n == n -> pure val
+  (Fix (C (InR (DoubleF   p_n))), Fix (DoubleF  n)) | p_n ~== n -> pure val
+  (Fix (C (InR (DoubleF   p_n))), Fix    (IntF  n)) | p_n == fromIntegral n -> pure (Fix (DoubleF p_n))
+  (Fix (C (InR (ObjectF   p_o))), Fix (ObjectF  o)) -> Fix . ObjectF <$> vObject path p_o  o
+  (Fix (C (InR ( ArrayF  p_xs))), Fix  (ArrayF xs)) -> Fix . ArrayF  <$> vArray  path p_xs xs
+  (Fix (C (InL (Const (_, ty)))), Fix            _) -> vTypeDefn path ty val
+  (_, _) -> Failure [WrongValue path pat val]
 
 vObject
   :: [Text]
-  -> Json.Object VoidF (Either () TypeDefn)
-  -> Json.Object VoidF Void
-  -> Validation [Mismatch] (Json.Object VoidF Void)
-vObject path (Object p_o) (Object o) =
-  Object . Map.fromList <$> checked <* checkUnexpected <* checkMissing
+  -> Map Text (Fix (CustomF TypeDefn))
+  -> Map Text Json
+  -> Validation [Mismatch] (Map Text Json)
+vObject path p_o o = Map.fromList <$> checked <* checkUnexpected <* checkMissing
   where
     checked = for (Set.toList present_keys) $ \k ->
       (k,) <$> vValue (path ++ [k]) (p_o Map.! k) (o Map.! k)
@@ -86,9 +82,9 @@ vObject path (Object p_o) (Object o) =
 
 vArray
   :: [Text]
-  -> [Json.Value VoidF (Either () TypeDefn)]
-  -> [Json.Value VoidF Void]
-  -> Validation [Mismatch] [Json.Value VoidF Void]
+  -> [Fix (CustomF TypeDefn)]
+  -> [Json]
+  -> Validation [Mismatch] [Json]
 vArray path p_xs xs = checkElems <* checkLength
   where
     checkElems =
@@ -101,36 +97,26 @@ vArray path p_xs xs = checkElems <* checkLength
            Failure [ArrayLengthMismatch path p_xs_len xs_len]
 
 
--- CUSTOM VALUES
+-- CUSTOM PATTERNS
 
-vCustom
+vTypeDefn
   :: [Text]
-  -> Either () TypeDefn
-  -> Json.Value VoidF Void
-  -> Validation [Mismatch] (Json.Value VoidF Void)
-vCustom path p_val val = case p_val of
-  Left ()  -> goArrayMany () val
-  Right ty -> goTypeDefn ty val
+  -> TypeDefn
+  -> Json
+  -> Validation [Mismatch] Json
+vTypeDefn path p_val val = case p_val of
+  ty -> goTypeDefn ty val
   where
-    goArrayMany
-      :: ()
-      -> Json.Value VoidF Void
-      -> Validation [Mismatch] (Json.Value VoidF Void)
-    goArrayMany () _x = pure undefined
-
-    goTypeDefn
-      :: TypeDefn
-      -> Json.Value VoidF Void
-      -> Validation [Mismatch] (Json.Value VoidF Void)
-    goTypeDefn  TyAny       x                = pure x
-    goTypeDefn  TyString    x@JsonText   {}  = pure x
-    goTypeDefn  TyInteger   x@JsonInteger{}  = pure x
-    goTypeDefn  TyDouble    x@JsonDouble {}  = pure x
-    goTypeDefn  TyDouble     (JsonInteger n) = pure (JsonDouble (fromIntegral n))
-    goTypeDefn  TyBool      x@JsonTrue       = pure x
-    goTypeDefn  TyBool      x@JsonFalse      = pure x
-    goTypeDefn  TyObject    x@JsonObject{}   = pure x
-    goTypeDefn  TyArray     x@JsonArray{}    = pure x
-    goTypeDefn (TyMaybe  _) x@JsonNull       = pure x
-    goTypeDefn (TyMaybe ty) x                = goTypeDefn ty x
-    goTypeDefn          ty  x                = Failure [WrongType path ty x]
+    goTypeDefn :: TypeDefn -> Json -> Validation [Mismatch] Json
+    goTypeDefn  TyAny       x@_                 = pure x
+    goTypeDefn  TyText      x@(Fix (TextF _))   = pure x
+    goTypeDefn  TyInt       x@(Fix (IntF _))    = pure x
+    goTypeDefn  TyDouble    x@(Fix (DoubleF _)) = pure x
+    goTypeDefn  TyDouble      (Fix (IntF n))    = pure (Fix (DoubleF (fromIntegral n)))
+    goTypeDefn  TyBool      x@(Fix TrueF)       = pure x
+    goTypeDefn  TyBool      x@(Fix FalseF)      = pure x
+    goTypeDefn  TyObject    x@(Fix (ObjectF _)) = pure x
+    goTypeDefn  TyArray     x@(Fix (ArrayF _))  = pure x
+    goTypeDefn (TyMaybe  _) x@(Fix NullF)       = pure x
+    goTypeDefn (TyMaybe ty) x                   = goTypeDefn ty x
+    goTypeDefn          ty  x                   = Failure [WrongType path ty x]

@@ -6,23 +6,34 @@
     , command'request_body = Nothing
     , command'response_body =
         Just
-          (JsonObject
-             (Object
-                (fromList
-                   [ ( "a" , JsonNull )
-                   , ( "b" , JsonTrue )
-                   , ( "c" , JsonFalse )
-                   , ( "d" , JsonText "foo" )
-                   , ( "e" , JsonText "abc\nxyz\tuvw" )
-                   , ( "f"
-                     , JsonArray [ JsonInteger 1 , JsonInteger 2 , JsonInteger 3 ]
-                     )
-                   , ( "g"
-                     , JsonObject
-                         (Object
-                            (fromList
-                               [ ( "x" , JsonNull ) , ( "y" , JsonTrue ) , ( "z" , JsonFalse ) ]))
-                     )
-                   ])))
+          (M (C (InR
+                   (ObjectF
+                      (fromList
+                         [ ( "a" , M (C (InR NullF)) [] )
+                         , ( "b" , M (C (InR TrueF)) [] )
+                         , ( "c" , M (C (InR FalseF)) [] )
+                         , ( "d" , M (C (InR (TextF "foo"))) [] )
+                         , ( "e" , M (C (InR (TextF "abc\nxyz\tuvw"))) [] )
+                         , ( "f"
+                           , M (C (InR
+                                     (ArrayF
+                                        [ M (C (InR (IntF 1))) []
+                                        , M (C (InR (IntF 2))) []
+                                        , M (C (InR (IntF 3))) []
+                                        ])))
+                               []
+                           )
+                         , ( "g"
+                           , M (C (InR
+                                     (ObjectF
+                                        (fromList
+                                           [ ( "x" , M (C (InR NullF)) [] )
+                                           , ( "y" , M (C (InR TrueF)) [] )
+                                           , ( "z" , M (C (InR FalseF)) [] )
+                                           ]))))
+                               []
+                           )
+                         ]))))
+             [])
     }
 ]

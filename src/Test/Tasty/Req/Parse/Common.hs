@@ -8,7 +8,7 @@ module Test.Tasty.Req.Parse.Common
   , ensure1stCol
   ) where
 
-import Control.Applicative
+import Control.Applicative (empty)
 import Control.Monad       (unless)
 import Data.List.NonEmpty  (NonEmpty((:|)))
 import Data.Text           (Text)

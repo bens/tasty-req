@@ -4,6 +4,7 @@
     , command'method = "GET"
     , command'url = [ Right "/" ]
     , command'request_body = Nothing
-    , command'response_body = Just (JsonObject (Object (fromList [])))
+    , command'response_body =
+        Just (M (C (InR (ObjectF (fromList [])))) [])
     }
 ]

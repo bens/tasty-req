@@ -1,52 +1,37 @@
-{-# LANGUAGE DeriveFoldable             #-}
-{-# LANGUAGE DeriveFunctor              #-}
-{-# LANGUAGE DeriveTraversable          #-}
-{-# LANGUAGE EmptyCase                  #-}
-{-# LANGUAGE EmptyDataDecls             #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE DeriveFoldable    #-}
+{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Test.Tasty.Req.Types
   ( ReqCustom(..), RespCustom(..), Command(..)
   , Ref(..), Side(..), Generator(..), TypeDefn(..)
     -- * JSON
-  , Value(..), Object(..)
-    -- * Eq and Show for Functors
-  , EqF(..), ShowF(..)
-    -- * Functor empty type
-  , VoidF, absurdF
+  , Json, JsonF(..)
+    -- * JSON with custom values
+  , CustomF(..), embedJsonF', elimCustom, elimCustomAlg
+    -- * JSON with custom values and merging
+  , MergeF(..), mergeEmbedJson
+  , patternCustoms, patternCustomsFinal
+  , elimMerge, elimMergeAlg
+  , PatternF, Pattern
   ) where
 
-import Data.List.NonEmpty (NonEmpty)
-import Data.Map           (Map)
-import Data.Set           (Set)
-import Data.Text          (Text)
-
--- EqF class
-
-class EqF f where
-  eqF :: Eq a => f a -> f a -> Bool
-
-instance EqF NonEmpty where eqF = (==)
-instance EqF VoidF    where eqF = absurdF
-
--- ShowF class
-
-class ShowF f where
-  showF :: Show a => f a -> String
-  showsPrecF :: Show a => Int -> f a -> ShowS
-
-instance ShowF NonEmpty where showF = show;    showsPrecF   = showsPrec
-instance ShowF VoidF    where showF = absurdF; showsPrecF _ = absurdF
+import Control.Lens         (ATraversal, Traversal, cloneTraversal, mapMOf)
+import Control.Monad        (foldM, (>=>))
+import Control.Recursion    (Fix(Fix), cata, cataM)
+import Data.Functor.Classes (Eq1(..), Show1(..))
+import Data.Functor.Const   (Const(..))
+import Data.Functor.Sum     (Sum(..))
+import Data.List.NonEmpty   (NonEmpty((:|)))
+import Data.Map             (Map)
+import Data.Set             (Set)
+import Data.Text            (Text)
+import Data.Void            (Void, absurd)
 
 strApp1 :: String -> Int -> ShowS -> ShowS
 strApp1 s p sh = showParen (p >= 11) $ showString s . showChar ' ' . sh
-
-showsApp1 :: Show a => String -> Int -> a -> ShowS
-showsApp1 s p a = strApp1 s p (showsPrec 11 a)
-
-showsFApp1 :: (ShowF f, Show a) => String -> Int -> f a -> ShowS
-showsFApp1 s p fa = strApp1 s p (showsPrecF 11 fa)
 
 -- Command AST
 
@@ -59,8 +44,8 @@ data Side
     deriving (Eq, Ord, Show)
 
 data Generator
-  = GenString
-  | GenInteger
+  = GenText
+  | GenInt
   | GenDouble
   | GenBool
   | GenMaybe Generator
@@ -68,8 +53,8 @@ data Generator
 
 data TypeDefn
   = TyAny
-  | TyString
-  | TyInteger
+  | TyText
+  | TyInt
   | TyDouble
   | TyBool
   | TyObject
@@ -80,87 +65,165 @@ data TypeDefn
 data ReqCustom
   = ReqRef Ref
   | ReqGen Generator
-    deriving Show
+    deriving (Eq, Show)
 
 data RespCustom
   = RespRef Ref
   | RespTypeDefn TypeDefn
-    deriving Show
+    deriving (Eq, Show)
 
 data Command = Command
   { command'id            :: Int
   , command'always        :: Bool
   , command'method        :: Text
   , command'url           :: [Either Ref Text]
-  , command'request_body  :: Maybe (Value NonEmpty ReqCustom)
-  , command'response_body :: Maybe (Value NonEmpty RespCustom)
-  } deriving Show
+  , command'request_body  :: Maybe (Pattern ReqCustom)
+  , command'response_body :: Maybe (Pattern RespCustom)
+  } deriving (Eq, Show)
 
--- JSON Values
 
-data Value f a
-  = JsonNull
-  | JsonTrue
-  | JsonFalse
-  | JsonText Text
-  | JsonInteger Int
-  | JsonDouble Double
-  | JsonObject (Object f a)
-  | JsonArray [Value f a]
-  | JsonCustom Text a
-  | JsonCombine (f (Value f a))
-    deriving (Functor, Foldable, Traversable)
+-- JSON values
 
-instance (EqF f, Eq a) => Eq (Value f a) where
-  JsonNull        == JsonNull         = True
-  JsonTrue        == JsonTrue         = True
-  JsonFalse       == JsonFalse        = True
-  JsonText x      == JsonText y       = x == y
-  JsonInteger x   == JsonInteger y    = x == y
-  JsonDouble x    == JsonDouble y     = x == y
-  JsonObject x    == JsonObject y     = x == y
-  JsonArray xs    == JsonArray ys     = xs == ys
-  JsonCombine xs  == JsonCombine ys   = eqF xs ys
-  JsonCustom nm x == JsonCustom nm' y = nm == nm' && x == y
-  _               == _                = False
+type Json = Fix JsonF
 
--- instance (OrdF f, Ord a) => Ord (Value f a) where
---   compare JsonNull
+data JsonF a
+  = NullF
+  | TrueF
+  | FalseF
+  | TextF Text
+  | IntF Int
+  | DoubleF Double
+  | ObjectF (Map Text a)
+  | ArrayF [a]
+    deriving (Functor, Foldable, Traversable, Eq, Show)
 
-instance (ShowF f, Show a) => Show (Value f a) where
-  showsPrec d = \case
-    JsonNull        -> showString "JsonNull"
-    JsonTrue        -> showString "JsonTrue"
-    JsonFalse       -> showString "JsonFalse"
-    JsonText x      -> showsApp1  "JsonText"    d x
-    JsonInteger n   -> showsApp1  "JsonInteger" d n
-    JsonDouble n    -> showsApp1  "JsonDouble"  d n
-    JsonObject o    -> showsApp1  "JsonObject"  d o
-    JsonArray xs    -> showsApp1  "JsonArray"   d xs
-    JsonCombine xs  -> showsFApp1 "JsonCombine" d xs
-    JsonCustom nm x -> showsApp1  ("JsonCustom " ++ show nm) d x
+instance Eq1 JsonF where
+  liftEq op a b = case (a, b) of
+    (  NullF  ,   NullF  ) -> True
+    (  TrueF  ,   TrueF  ) -> True
+    ( FalseF  ,  FalseF  ) -> True
+    (  TextF x,   TextF y) -> x == y
+    (   IntF x,    IntF y) -> x == y
+    (DoubleF x, DoubleF y) -> x == y
+    (ObjectF x, ObjectF y) -> liftEq op x y
+    ( ArrayF x,  ArrayF y) -> liftEq op x y
+    (        _,         _) -> False
 
--- JSON Objects
+instance Show1 JsonF where
+  liftShowsPrec p p_list d = \case
+    NullF     -> showString "NullF"
+    TrueF     -> showString "TrueF"
+    FalseF    -> showString "FalseF"
+    TextF   x -> strApp1 "TextF"   d (showsPrec d x)
+    IntF    x -> strApp1 "IntF"    d (showsPrec d x)
+    DoubleF x -> strApp1 "DoubleF" d (showsPrec d x)
+    ObjectF o -> strApp1 "ObjectF" d (liftShowsPrec p p_list d o)
+    ArrayF xs -> strApp1 "ArrayF"  d (liftShowsPrec p p_list d xs)
 
-newtype Object f a
-  = Object (Map Text (Value f a))
-    deriving (Eq, Show, Functor, Foldable, Monoid, Semigroup, Traversable)
 
--- Empty functor type
+-- JSON patterns without merging
 
-data VoidF a
+newtype CustomF x a = C (Sum (Const (Text, x)) JsonF a)
+  deriving (Functor, Foldable, Traversable, Eq, Show)
 
-absurdF :: VoidF a -> b
-absurdF x = case x of {}
+instance Eq x => Eq1 (CustomF x) where
+  liftEq op (C x) (C y) = liftEq op x y
 
-instance Functor VoidF where
-  fmap _ = absurdF
+instance Show x => Show1 (CustomF x) where
+  liftShowsPrec p p_list d (C x) =
+    strApp1 "C" d (liftShowsPrec p p_list 11 x)
 
-instance Foldable VoidF where
-  foldMap _ = absurdF
+patternCustoms
+  :: Traversal
+       (PatternF a (Pattern b))
+       (PatternF b (Pattern b))
+       (Text, a)
+       (Either b (JsonF (Pattern b)))
+patternCustoms f (M x xs) = M <$> g x <*> traverse g xs
+  where
+    g (C (InL (Const (nm, a)))) =
+      either (C . InL . Const . (nm,)) (C . InR) <$> f (nm, a)
+    g (C (InR j)) =
+      pure (C (InR j))
 
-instance Traversable VoidF where
-  traverse _ = absurdF
+patternCustomsFinal
+  :: Traversal
+       (PatternF a (Fix (MergeF JsonF)))
+       (MergeF JsonF (Fix (MergeF JsonF)))
+       (Text, a)
+       (Either Void (JsonF (Fix (MergeF JsonF))))
+patternCustomsFinal f (M x xs) = M <$> g x  <*> traverse g xs
+  where
+    g (C (InL (Const (nm, a)))) = either absurd id <$> f (nm, a)
+    g (C (InR j))               = pure j
 
-instance Semigroup (VoidF a) where
-  x <> _ = absurdF x
+elimCustom
+  :: (Traversable f, Monad m)
+  => ATraversal (f (Fix g)) (g (Fix g)) (Text, a) (Either b (JsonF (Fix g)))
+  -> (Text -> a -> m (Either b (JsonF (Fix g))))
+  -> Fix f
+  -> m (Fix g)
+elimCustom trav subst = cataM (elimCustomAlg trav subst)
+
+elimCustomAlg
+  :: Monad m
+  => ATraversal (f (Fix g)) (g (Fix g)) (Text, a) (Either b (JsonF (Fix g)))
+  -> (Text -> a -> m (Either b (JsonF (Fix g))))
+  -> f (Fix g)
+  -> m (Fix g)
+elimCustomAlg trav subst =
+  fmap Fix . mapMOf (cloneTraversal trav) (uncurry subst)
+
+embedJsonF' :: Json -> Fix (CustomF x)
+embedJsonF' = cata $ Fix . C . InR
+
+
+-- JSON patterns with merging
+
+type PatternF a = MergeF (CustomF a)
+
+type Pattern a = Fix (PatternF a)
+
+data MergeF f a = M (f a) [f a]
+  deriving (Functor, Foldable, Traversable, Eq, Show)
+
+instance Eq1 f => Eq1 (MergeF f) where
+  liftEq op a b = case (a, b) of
+    (M x xs, M y ys) ->
+      liftEq op x y && liftEq (liftEq op) xs ys
+
+instance Show1 f => Show1 (MergeF f) where
+  liftShowsPrec p p_list d (M x xs) =
+    strApp1 "M" d
+      $ liftShowsPrec p p_list 11 x
+      . showChar ' '
+      . liftShowsPrec (liftShowsPrec p p_list) (liftShowList p p_list) 11 xs
+
+mergeEmbedJson :: Json -> Pattern a
+mergeEmbedJson = cata $ Fix . flip M [] . C . InR
+
+elimMerge
+  :: (Traversable f, Monad m)
+  => (MergeF f (Fix f) -> m (NonEmpty (f (Fix f))))
+  -> (f (Fix f) -> f (Fix f) -> m (f (Fix f)))
+  -> Fix (MergeF f)
+  -> m (Fix f)
+elimMerge ex op = cataM (elimMergeAlg ex op)
+
+elimMergeAlg
+  :: Monad m
+  => (MergeF a (Fix f) -> m (NonEmpty (f (Fix f))))
+  -> (f (Fix f) -> f (Fix f) -> m (f (Fix f)))
+  -> MergeF a (Fix f)
+  -> m (Fix f)
+elimMergeAlg ex op =
+  ex >=> \(y :| ys) -> Fix <$> foldM op y ys
+
+
+-- Orphans
+
+instance Eq1 f => Eq (Fix f) where
+  Fix x == Fix y = liftEq (==) x y
+
+instance Show1 f => Show (Fix f) where
+  showsPrec d (Fix x) = showParen (d > 10) $ liftShowsPrec showsPrec showList 11 x

@@ -1,1 +1,1 @@
-JsonArray [ JsonInteger 1 , JsonInteger 2 , JsonInteger 3 ]
+ArrayF [ IntF 1 , IntF 2 , IntF 3 ]

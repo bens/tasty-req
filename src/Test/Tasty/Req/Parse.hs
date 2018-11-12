@@ -2,7 +2,7 @@
 {-# LANGUAGE TypeFamilies      #-}
 
 module Test.Tasty.Req.Parse
-  ( parser
+  ( pScript, pCommand, pResponse, pRequestPattern, pResponsePattern
   ) where
 
 import Control.Applicative (many, optional, some, (<|>))
@@ -18,11 +18,13 @@ import qualified Text.Megaparsec.Char.Lexer as P.L
 import Test.Tasty.Req.Parse.Common
   (ensure1stCol, hspace, lexemeH, spaces, symbol, symbolH)
 import Test.Tasty.Req.Types
+  (Command(..), Generator(..), Json, Pattern, Ref(..), ReqCustom(..), RespCustom(..),
+  Side(..), TypeDefn(..))
 
 import qualified Test.Tasty.Req.Parse.JSON as Json
 
-parser :: Ord e => P.ParsecT e Text m [Command]
-parser = spaces *> many pCommand <* P.eof
+pScript :: Ord e => P.ParsecT e Text m [Command]
+pScript = spaces *> many pCommand <* P.eof
 
 -- REF
 
@@ -32,9 +34,9 @@ pRef = do
   side <- (Request <$ P.C.char '?') <|> (Response <$ P.C.char '!')
   path <- lexemeH $ many $ P.between (P.C.char '[') (P.C.char ']') $
     P.eitherP
-      (Json.runParser Json.combineVoidF Json.integer')  -- array index
-      (Json.runParser Json.combineVoidF Json.text')     -- object key
-  let psr = Json.runParser Json.combineVoidF Json.text'
+      (Json.runParserJSON Json.integer')  -- array index
+      (Json.runParserJSON Json.text')     -- object key
+  let psr = Json.runParserJSON Json.text'
   sans <- (symbol "/" *> many (lexemeH psr)) <|> pure []
   pure (Ref r side path (Set.fromList sans))
 
@@ -44,10 +46,10 @@ pGenerator :: Ord e => P.ParsecT e Text m Generator
 pGenerator = term <|> (GenMaybe <$> (symbolH "maybe" *> term))
   where
     term = asum
-      [ GenString  <$ symbolH "string"
-      , GenInteger <$ symbolH "integer"
-      , GenDouble  <$ symbolH "double"
-      , GenBool    <$ symbolH "boolean"
+      [ GenText   <$ symbolH "string"
+      , GenInt    <$ symbolH "integer"
+      , GenDouble <$ symbolH "double"
+      , GenBool   <$ symbolH "boolean"
       ]
 
 -- TYPE DEFN
@@ -56,20 +58,46 @@ pTypeDefn :: Ord e => P.ParsecT e Text m TypeDefn
 pTypeDefn = term <|> (TyMaybe <$> (symbolH "maybe" *> term))
   where
     term = asum
-      [ TyAny     <$ symbolH "any"
-      , TyString  <$ symbolH "string"
-      , TyInteger <$ symbolH "integer"
-      , TyDouble  <$ symbolH "double"
-      , TyBool    <$ symbolH "boolean"
-      , TyObject  <$ symbolH "object"
-      , TyArray   <$ symbolH "array"
+      [ TyAny    <$ symbolH "any"
+      , TyText   <$ symbolH "string"
+      , TyInt    <$ symbolH "integer"
+      , TyDouble <$ symbolH "double"
+      , TyBool   <$ symbolH "boolean"
+      , TyObject <$ symbolH "object"
+      , TyArray  <$ symbolH "array"
       ]
+
+pResponse :: Ord e => P.ParsecT e Text m Json
+pResponse = Json.runParserJSON (Json.object <> Json.array) <* P.eof
+
+pRequestPattern :: Ord e => P.ParsecT e Text m (Pattern ReqCustom)
+pRequestPattern = Json.runParserPattern $
+  let customRec = [ ("r", ReqRef <$> pRef)
+                  , ("g", ReqGen <$> pGenerator)
+                  ]
+  in Json.combine
+     ( Json.withCustom (Json.customParsers customRec) Json.object <>
+       Json.withCustom (Json.customParsers customRec) Json.custom
+     ) <>
+     Json.withCustom (Json.customParsers customRec) Json.array
+
+pResponsePattern :: Ord e => P.ParsecT e Text m (Pattern RespCustom)
+pResponsePattern = Json.runParserPattern $
+  let customRec = [ ("r", RespRef <$> pRef)
+                  , ("t", RespTypeDefn <$> pTypeDefn)
+                  ]
+      customTop = [ ("r", RespRef <$> pRef)
+                  ]
+  in Json.combine
+     ( Json.withCustom (Json.customParsers customRec) Json.object <>
+       Json.withCustom (Json.customParsers customTop) Json.custom
+     ) <>
+     Json.withCustom (Json.customParsers customRec) Json.array
 
 -- COMMAND
 
 pMethod :: Ord e => P.ParsecT e Text m Text
-pMethod = lexemeH $
-  P.takeWhile1P (Just "HTTP method (GET, POST, ...)") isUpper
+pMethod = lexemeH $ P.takeWhile1P (Just "HTTP method (GET, POST, ...)") isUpper
 
 pUrl :: Ord e => P.ParsecT e Text m [Either Ref Text]
 pUrl = lexemeH (some pSegment)
@@ -85,27 +113,7 @@ pCommand = do
   always  <- ((True <$ P.C.char '*') <|> pure False) <* symbolH ":"
   method  <- pMethod
   url     <- pUrl <* hspace <* P.C.newline
-  request <- optional $
-    Json.runParser Json.combineList $
-      let custom = [ ("r", ReqRef <$> pRef)
-                   , ("g", ReqGen <$> pGenerator)
-                   ]
-      in Json.combine
-         ( Json.withCustom (Json.customParsers custom) Json.object <>
-           Json.withCustom (Json.customParsers custom) Json.custom
-         ) <>
-         Json.withCustom (Json.customParsers custom) Json.array
+  request <- optional pRequestPattern
   spaces *> ensure1stCol *> symbol "---"
-  expected <- optional $
-    Json.runParser Json.combineList $
-      let customA = [ ("r",    RespRef       <$> pRef)
-                    , ("t",    RespTypeDefn  <$> pTypeDefn)
-                    ]
-          customB = [ ("r", RespRef <$> pRef)
-                    ]
-      in Json.combine
-         ( Json.withCustom (Json.customParsers customA) Json.object <>
-           Json.withCustom (Json.customParsers customB) Json.custom
-         ) <>
-         Json.withCustom (Json.customParsers customA) Json.array
+  expected <- optional pResponsePattern
   pure (Command n always method url request expected)

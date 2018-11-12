@@ -18,11 +18,9 @@ import Text.Show.Pretty      (ppShow)
 import qualified Data.Text.IO    as Text
 import qualified Text.Megaparsec as P
 
-import Test.Tasty.Req.Parse (parser)
-import Test.Tasty.Req.Types (Command, VoidF)
+import Test.Tasty.Req.Types (Command, Json)
 
-import qualified Test.Tasty.Req.Parse.JSON as Json
-import qualified Test.Tasty.Req.Runner     as Runner
+import qualified Test.Tasty.Req.Parse as Parse
 
 mkScriptTests :: FilePath -> IO TestTree
 mkScriptTests dir = do
@@ -36,8 +34,7 @@ mkScriptTests dir = do
     diff ref new = ["diff", "-u", ref, new]
     go reqPath outPath = do
       script <- Text.readFile reqPath
-      let p = parser
-            :: P.ParsecT Void Text Identity [Command]
+      let p = Parse.pScript :: P.ParsecT Void Text Identity [Command]
       try (pure $! P.parse p reqPath script) >>= \case
         Left exc -> let _ = exc :: SomeException in writeFile outPath (show exc ++ "\n")
         Right (Left err) -> writeFile outPath (P.errorBundlePretty err)
@@ -55,8 +52,7 @@ mkJsonTests dir = do
     diff ref new = ["diff", "-u", ref, new]
     go jsonPath outPath = do
       script <- Text.readFile jsonPath
-      let p = Runner.responseParser
-            :: P.ParsecT Void Text Identity (Json.Value VoidF Void)
+      let p = Parse.pResponse :: P.ParsecT Void Text Identity Json
       try (pure $! P.parse p jsonPath script) >>= \case
         Left exc -> let _ = exc :: SomeException in writeFile outPath (show exc ++ "\n")
         Right (Left err) -> writeFile outPath (P.errorBundlePretty err)

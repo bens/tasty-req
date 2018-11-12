@@ -14,32 +14,29 @@
 {-# LANGUAGE TupleSections     #-}
 
 module Test.Tasty.Req.Parse.JSON
-  ( -- * JSON Values
-    Value(..), ppValue, substitute
-    -- * JSON Objects
-  , Object(..), getObject, ppObject
-  -- * Parsers
-  , Parser, runParser
-  -- * Custom Parsers
+  (
+    -- * Parsers
+    Parser, Ctx(..), runParser, runParserJSON, runParserPattern, mapParser
+    -- * Custom Parsers
   , CustomParser, customParsers, emptyCustom, withCustom
-  -- * Combiners
-  , Combine, combineList, combineVoidF, injectVoidF, elimCombine
-  -- * JsonValue parsers
-  , value
-  , object, array, text, number, atom, combine, custom
-  -- * Type-specific parsers
-  , object', array', text', integer', number', combine', custom'
+    -- * JsonValue parsers
+  , json, atom, text, number, object, array
+    -- * Extras
+  , custom, combine
+    -- * Typeful parsers
+  , text', integer', number'
+    -- * Pretty printing
+  , ppJson, ppCustomOnly, ppPattern
   ) where
 
-import Control.Applicative
-import Control.Monad       (foldM)
+import Control.Applicative (empty, liftA2, many, some, (<|>))
+import Control.Recursion   (Fix(..), cata)
 import Data.Char           (chr, isDigit, isHexDigit, isLower, isUpper, ord)
-import Data.Foldable       (asum, toList)
+import Data.Foldable       (asum)
+import Data.Functor.Const  (Const(..))
+import Data.Functor.Sum    (Sum(..))
 import Data.List           (foldl', intersperse, sort)
-import Data.List.NonEmpty  (NonEmpty((:|)))
 import Data.Map            (Map)
-import Data.Maybe          (fromMaybe)
-import Data.Semigroup      (sconcat)
 import Data.Text           (Text)
 
 import qualified Data.Map             as Map
@@ -48,229 +45,220 @@ import qualified Text.Megaparsec      as P
 import qualified Text.Megaparsec.Char as P.C
 import qualified Text.PrettyPrint     as PP
 
-import Test.Tasty.Req.Parse.Common
+import Test.Tasty.Req.Parse.Common (lexeme, symbol)
 import Test.Tasty.Req.Types
+  (CustomF(..), Json, JsonF(..), MergeF(..), Pattern, PatternF)
 
+-- PRETTY PRINTING
 
--- JSON VALUES
+ppJson :: Json -> PP.Doc
+ppJson = cata ppJsonF
 
-substitute
-  :: (Monad m, Traversable f)
-  => (Text -> a -> m (Value f b))
-  -> Value f a -> m (Value f b)
-substitute f = \case
-  JsonNull              -> pure JsonNull
-  JsonTrue              -> pure JsonTrue
-  JsonFalse             -> pure JsonFalse
-  JsonText x            -> pure (JsonText x)
-  JsonInteger x         -> pure (JsonInteger x)
-  JsonDouble x          -> pure (JsonDouble x)
-  JsonObject (Object o) -> JsonObject . Object <$> traverse (substitute f) o
-  JsonArray xs          -> JsonArray <$> traverse (substitute f) xs
-  JsonCombine xs        -> JsonCombine <$> traverse (substitute f) xs
-  JsonCustom nm x       -> f nm x
+ppCustomOnly :: (a -> PP.Doc) -> Fix (CustomF a) -> PP.Doc
+ppCustomOnly = cata . ppCustomF
 
-ppValue :: (a -> PP.Doc) -> Value f a -> PP.Doc
-ppValue f = \case
-  JsonNull        -> PP.text "null"
-  JsonTrue        -> PP.text "true"
-  JsonFalse       -> PP.text "false"
-  JsonText x      -> PP.text (show x)
-  JsonInteger n   -> PP.text (show n)
-  JsonDouble n    -> PP.text (show n)
-  JsonObject o    -> ppObject f o
-  JsonArray xs    -> ppArray f xs
-  JsonCombine _xs -> error "TODO"
-  JsonCustom nm x -> PP.braces $ (PP.colon <> PP.text (Text.unpack nm)) PP.<+> f x
+ppPattern :: (a -> PP.Doc) -> Pattern a -> PP.Doc
+ppPattern = cata . ppPatternF
 
-ppArray :: (a -> PP.Doc) -> [Value f a] -> PP.Doc
-ppArray f xs =
-  PP.brackets (PP.nest 2 (foldr (.) id (addCommas items) mempty))
+-- PRETTY PRINTING ALGEBRAS
+
+ppJsonF :: JsonF PP.Doc -> PP.Doc
+ppJsonF = \case
+  NullF     -> PP.text "null"
+  TrueF     -> PP.text "true"
+  FalseF    -> PP.text "false"
+  TextF   x -> PP.text (show x)
+  IntF    n -> PP.text (show n)
+  DoubleF n -> PP.text (show n)
+  ObjectF o -> ppObject o
+  ArrayF xs -> ppArray xs
+
+ppCustomF :: (a -> PP.Doc) -> CustomF a PP.Doc -> PP.Doc
+ppCustomF pp = \case
+  C (InL (Const (nm, x))) ->
+    PP.braces $ (PP.colon <> PP.text (Text.unpack nm)) PP.<+> pp x
+  C (InR j) ->
+    ppJsonF j
+
+ppPatternF :: (a -> PP.Doc) -> PatternF a PP.Doc -> PP.Doc
+ppPatternF pp (M x xs) =
+  PP.vcat (intersperse (PP.text "<>") (map (ppCustomF pp) (x:xs)))
+
+ppObject :: Map Text PP.Doc -> PP.Doc
+ppObject m = PP.braces (PP.nest 2 (foldr (.) id docs mempty))
   where
-    items     = map go xs
-    go x      = (ppValue f x PP.$$)
-    addCommas = intersperse (<> PP.comma)
+    docs = intersperse (<> PP.comma) $ map f (Map.toList m)
+    f (k, v) = (PP.$$ ((PP.text (show k) <> PP.colon) PP.<+> v))
 
-
--- JSON OBJECT
-
-getObject :: Object f a -> Map Text (Value f a)
-getObject (Object x) = x
-
-ppObject :: (a -> PP.Doc) -> Object f a -> PP.Doc
-ppObject f (Object m) =
-  PP.braces (PP.nest 2 (foldr (.) id (addCommas fields) mempty))
+ppArray :: [PP.Doc] -> PP.Doc
+ppArray xs = PP.brackets (PP.nest 2 (foldr (.) id docs mempty))
   where
-    fields    = map (uncurry go) (Map.toList m)
-    go k v    = (PP.$$ ((PP.text (show k) <> PP.colon) PP.<+> ppValue f v))
-    addCommas = intersperse (<> PP.comma)
-
+    docs = intersperse (<> PP.comma) $ map (PP.$$) xs
 
 -- PARSER
 
+data Ctx m e f x = Ctx
+  { injectJsonF   :: JsonF (Fix f) -> Fix f
+  , injectCustomF :: Maybe (Text -> x -> Fix f)
+  , injectMergeF  :: Maybe (Fix f -> [Fix f] -> Fix f)
+  , customParser  :: CustomParser m e x
+  }
+
 data Parser m e f x a
   = Parser
-      (Map Char [CustomParser m e x -> Combine f -> P.ParsecT e Text m a])
-      (CustomParser m e x -> Combine f -> P.ParsecT e Text m a)
+      (Map Char [Ctx m e f x -> P.ParsecT e Text m a])
+      (Ctx m e f x -> P.ParsecT e Text m a)
     deriving Functor
 
 instance Ord e => Semigroup (Parser m e f x a) where
-  Parser a x <> Parser b y = Parser (Map.unionWith (++) a b) (\c d -> x c d <|> y c d)
+  Parser a x <> Parser b y =
+    Parser (Map.unionWith (++) a b) (\ctx -> x ctx <|> y ctx)
 
 instance Ord e => Monoid (Parser m e f x a) where
-  mempty = Parser Map.empty (\_ _ -> empty)
+  mempty = Parser Map.empty (const empty)
   mappend = (<>)
 
-runParser :: Ord e => Combine f -> Parser m e f x a -> P.ParsecT e Text m a
-runParser = runParser' emptyCustom
+runParser
+  :: Ord e
+  => (JsonF (Fix f) -> Fix f)          -- ^ Inject JsonF values
+  -> Maybe (Text -> x -> Fix f)        -- ^ Inject Custom values
+  -> Maybe (Fix f -> [Fix f] -> Fix f) -- ^ Inject combinations
+  -> Parser m e f x a
+  -> P.ParsecT e Text m a
+runParser f g h = runParser' (Ctx f g h emptyCustom)
+
+runParserJSON
+  :: Ord e
+  => Parser m e JsonF x a
+  -> P.ParsecT e Text m a
+runParserJSON = runParser Fix Nothing Nothing
+
+runParserPattern
+  :: Ord e
+  => Parser m e (PatternF x) x a
+  -> P.ParsecT e Text m a
+runParserPattern = runParser injJ (Just injC) (Just injM)
+  where
+    injJ x                 = Fix (M (C (InR x)) [])
+    injC nm x              = Fix (M (C (InL (Const (nm, x)))) [])
+    injM (Fix (M x xs)) ys = Fix (M x (xs ++ (ys >>= collect)))
+    collect (Fix (M x xs)) = x:xs
 
 runParser'
   :: Ord e
-  => CustomParser m e x
-  -> Combine f
-  -> Parser m e f x a -> P.ParsecT e Text m a
-runParser' c d (Parser ms p) =
-  (lexeme (P.oneOf (Map.keys ms)) >>= \x -> asum (map (\f -> f c d) (ms Map.! x))) <|> p c d
+  => Ctx m e f x
+  -> Parser m e f x a
+  -> P.ParsecT e Text m a
+runParser' ctx (Parser prefixed other) =
+  (pKey >>= \i -> asum [p ctx | p <- prefixed Map.! i]) <|> other ctx
+  where
+    pKey = lexeme (P.oneOf (Map.keys prefixed))
 
 prefixParser
   :: Ord e
   => Char
-  -> (CustomParser m e x -> Combine f -> P.ParsecT e Text m a)
+  -> (Ctx m e f x -> P.ParsecT e Text m a)
   -> Parser m e f x a
-prefixParser c m = Parser (Map.singleton c [m]) (\_ _ -> empty)
+prefixParser ctx m = Parser (Map.singleton ctx [m]) (const empty)
 
 otherParser
-  :: (CustomParser m e x -> Combine f -> P.ParsecT e Text m a)
+  :: (Ctx m e f x -> P.ParsecT e Text m a)
   -> Parser m e f x a
 otherParser = Parser Map.empty
 
+mapParser :: (Ctx m e f x -> a -> b)-> Parser m e f x a -> Parser m e f x b
+mapParser f (Parser prefixed other) = Parser prefixed' other'
+  where
+    prefixed' = fmap (map (\k ctx -> fmap (f ctx) (k ctx))) prefixed
+    other' ctx = fmap (f ctx) (other ctx)
 
 -- CUSTOM VALUES
 
-newtype CustomParser m e x = CustomParser (P.ParsecT e Text m (Text, x))
+newtype CustomParser m e x = CustomParser (Map Text (P.ParsecT e Text m x))
 
-emptyCustom :: Ord e => CustomParser m e x
+emptyCustom :: CustomParser m e x
 emptyCustom = customParsers []
 
-customParsers :: Ord e => [(Text, P.ParsecT e Text m x)] -> CustomParser m e x
-customParsers ps = CustomParser $
-  asum [(nm,) <$> (symbol (":" <> nm) *> psr) | (nm, psr) <- ps]
+customParsers :: [(Text, P.ParsecT e Text m x)] -> CustomParser m e x
+customParsers = CustomParser . Map.fromList
 
 withCustom :: CustomParser m e x -> Parser m e f x a -> Parser m e f x a
-withCustom c (Parser x y) = Parser (fmap (map (\k _ -> k c)) x) (\_ -> y c)
-
-
--- COMBINERS
-
--- A combiner needs a way to inject a value into a structure type and a way to
--- see if there is a single value contained in the structure.
-data Combine f = Combine (forall a. a -> f a) (forall a. f a -> Maybe a)
-
-combineList :: Combine NonEmpty
-combineList = Combine (:|[]) (\(x:|xs) -> if null xs then Just x else Nothing)
-
-combineVoidF :: Combine VoidF
-combineVoidF = Combine (error "combineVoidF: ka-boom!") (const Nothing)
-
-injectVoidF :: Value VoidF a -> Value NonEmpty a
-injectVoidF = \case
-  JsonNull              -> JsonNull
-  JsonTrue              -> JsonTrue
-  JsonFalse             -> JsonFalse
-  JsonText x            -> JsonText x
-  JsonInteger n         -> JsonInteger n
-  JsonDouble n          -> JsonDouble n
-  JsonObject (Object o) -> JsonObject (Object (fmap injectVoidF o))
-  JsonArray xs          -> JsonArray (map injectVoidF xs)
-  JsonCombine xs        -> absurdF xs
-  JsonCustom nm x       -> JsonCustom nm x
-
-elimCombine
-  :: (Monad m, Traversable f)
-  => (Value VoidF a -> Value VoidF a -> m (Value VoidF a))
-  -> Value f a -> m (Value VoidF a)
-elimCombine f = \case
-  JsonNull              -> pure JsonNull
-  JsonTrue              -> pure JsonTrue
-  JsonFalse             -> pure JsonFalse
-  JsonText x            -> pure (JsonText x)
-  JsonInteger x         -> pure (JsonInteger x)
-  JsonDouble x          -> pure (JsonDouble x)
-  JsonObject (Object o) -> JsonObject . Object <$> traverse (elimCombine f) o
-  JsonArray xs          -> JsonArray <$> traverse (elimCombine f) xs
-  JsonCustom nm x       -> pure (JsonCustom nm x)
-  JsonCombine xs -> do
-    ys <- traverse (elimCombine f) xs
-    case toList ys of
-      a:as -> foldM f a as
-      []   -> error "impossible: JsonCombine must be VoidF or NonEmpty"
-
+withCustom cust (Parser prefixed other) =
+  Parser
+    (fmap (map (\k ctx -> k (addCustom ctx cust))) prefixed)
+    (\ctx -> other (addCustom ctx cust))
+  where
+    addCustom ctx (CustomParser b) =
+      let CustomParser a = customParser ctx
+      in ctx{ customParser = CustomParser (a <> b) }
 
 -- VALUE PARSERS
 
-value
-  :: (Ord e, Semigroup (f (Value f x)))
-  => Parser m e f x (Value f x)
-value = mconcat [atom, text, number, array, combine (object <> custom)]
+json :: Ord e => Parser m e f x (Fix f)
+json = mconcat [atom, text, number, combine (array <> object <> custom)]
 
-object
-  :: (Ord e, Semigroup (f (Value f x)))
-  => Parser m e f x (Value f x)
-object = JsonObject <$> object'
-
-array
-  :: (Ord e, Semigroup (f (Value f x)))
-  => Parser m e f x (Value f x)
-array = JsonArray <$> array'
-
-text :: Ord e => Parser m e f x (Value f x)
-text = JsonText <$> text'
-
-number :: Ord e => Parser m e f x (Value f x)
-number = either JsonInteger JsonDouble <$> number'
-
-atom :: Ord e => Parser m e f x (Value f x)
-atom = mconcat
-  [ otherParser (\_ _ -> (JsonNull  <$ symbol "null"))
-  , otherParser (\_ _ -> (JsonTrue  <$ symbol "true"))
-  , otherParser (\_ _ -> (JsonFalse <$ symbol "false"))
+atom :: Ord e => Parser m e f x (Fix f)
+atom = mapParser injectJsonF $ mconcat
+  [ otherParser (const ( NullF <$ symbol "null"))
+  , otherParser (const ( TrueF <$ symbol "true"))
+  , otherParser (const (FalseF <$ symbol "false"))
   ]
 
-combine
-  :: (Ord e, Semigroup (f (Value f x)))
-  => Parser m e f x (Value f x)
-  -> Parser m e f x (Value f x)
-combine ps = otherParser $ \c d ->
-  runParser' c d (combine' ps) >>= either pure (pure . JsonCombine)
+text :: Ord e => Parser m e f x (Fix f)
+text = mapParser injectJsonF (TextF <$> text')
 
-custom :: Ord e => Parser m e f x (Value f x)
-custom = uncurry JsonCustom <$> custom'
+number :: Ord e => Parser m e f x (Fix f)
+number = mapParser injectJsonF (either IntF DoubleF <$> number')
+
+object :: Ord e => Parser m e f x (Fix f)
+object = mapParser injectJsonF (ObjectF <$> object')
+
+array :: Ord e => Parser m e f x (Fix f)
+array = mapParser injectJsonF (ArrayF <$> array')
+
+custom :: Ord e => Parser m e f x (Fix f)
+custom = prefixParser '{' $ \ctx ->
+  case injectCustomF ctx of
+    Nothing -> empty
+    Just f  -> do
+      _ <- P.C.char ':'
+      let CustomParser c = customParser ctx
+      let p = asum [ (nm,) <$> (symbol nm *> psr)
+                   | (nm, psr) <- Map.toList c ]
+      uncurry f <$> (p <* symbol "}")
+
+combine :: Ord e => Parser m e f x (Fix f) -> Parser m e f x (Fix f)
+combine ps = otherParser $ \ctx -> do
+  let psr = runParser' ctx ps
+  let psrMerge = (symbol "<>" *> P.sepBy psr (symbol "<>")) <|> pure []
+  case injectMergeF ctx of
+    Nothing -> psr
+    Just f  ->
+      (,) <$> psr <*> psrMerge >>= \case
+        (x, []) -> pure x
+        (x, xs) -> pure (f x xs)
 
 
 -- TYPEFUL PARSERS
 
-object'
-  :: (Ord e, Semigroup (f (Value f x)))
-  => Parser m e f x (Object f x)
-object' = prefixParser '{' $ \c d -> do
+object' :: Ord e => Parser m e f x (Map Text (Fix f))
+object' = prefixParser '{' $ \ctx -> do
   pairs <- flip P.sepEndBy (symbol ",") $
-    (,) <$> (lexeme (runParser' c d text') <* symbol ":")
-        <*> lexeme (runParser' c d value)
+    (,) <$> (lexeme (runParser' ctx text') <* symbol ":")
+        <*> lexeme (runParser' ctx json)
   let repeats = map fst $
         let ks = sort (map fst pairs)
         in filter (uncurry (==)) (zip ks (drop 1 ks))
   if null repeats
-    then Object (Map.fromList pairs) <$ symbol "}"
+    then Map.fromList pairs <$ symbol "}"
     else fail ("Repeated object keys: " ++ show repeats)
 
-array'
-  :: (Ord e, Semigroup (f (Value f x)))
-  => Parser m e f x [Value f x]
-array' = prefixParser '[' $ \c d ->
-  P.sepBy (lexeme (runParser' c d value)) (symbol ",") <* symbol "]"
+array' :: Ord e => Parser m e f x [Fix f]
+array' = prefixParser '[' $ \ctx ->
+  P.sepBy (lexeme (runParser' ctx json)) (symbol ",") <* symbol "]"
 
 text' :: Ord e => Parser m e f x Text
-text' = otherParser $ \_ _ -> P.label "string literal" $ P.C.char '"' *> go id
+text' = otherParser $ \_ -> P.label "string literal" (P.C.char '"' *> go id)
   where
     go :: Ord e => (Text -> Text) -> P.ParsecT e Text m Text
     go k = do
@@ -305,12 +293,12 @@ pInteger = do
       pure $! foldl' (\i x -> i * 10 + val x) 0 digits
 
 integer' :: Ord e => Parser m e f x Int
-integer' = otherParser $ \_ _ -> P.label "integer" $ do
+integer' = otherParser $ \_ -> P.label "integer" $ do
   (neg, n) <- pInteger
   pure $ (if neg then negate else id) n
 
 number' :: Ord e => Parser m e f x (Either Int Double)
-number' = otherParser $ \_ _ -> P.label "number" $ do
+number' = otherParser $ \_ -> P.label "number" $ do
   (neg, as) <- pInteger
   (Right . (if neg then negate else id) <$> double (fromIntegral as)) <|>
     pure (Left ((if neg then negate else id) as))
@@ -330,22 +318,6 @@ number' = otherParser $ \_ _ -> P.label "number" $ do
       digits <- some P.C.digitChar
       let expn = foldl' (\i x -> i * 10 + val x) 0 digits
       pure $! as `op` (10 ^ expn)
-
-combine'
-  :: (Ord e, Semigroup (f a))
-  => Parser m e f x a -> Parser m e f x (Either a (f a))
-combine' p = otherParser $ \c d -> do
-  let Combine inject inspect = d
-  let psr     = runParser' c d p
-  let psrMany = (symbol "<>" *> P.sepBy psr (symbol "<>")) <|> pure []
-  x <- psr
-  fromMaybe (pure []) (inspect (inject psrMany)) >>= \case
-    [] -> pure (Left x)
-    xs -> pure (Right (sconcat (fmap inject (x :| xs))))
-
-custom' :: Ord e => Parser m e f x (Text, x)
-custom' = prefixParser '{' $ \(CustomParser c) _ -> c <* symbol "}"
-
 
 -- Helpers
 

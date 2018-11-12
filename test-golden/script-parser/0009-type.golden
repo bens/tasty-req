@@ -6,17 +6,20 @@
     , command'request_body = Nothing
     , command'response_body =
         Just
-          (JsonObject
-             (Object
-                (fromList
-                   [ ( "a" , JsonCustom "t" (RespTypeDefn TyAny) )
-                   , ( "b" , JsonCustom "t" (RespTypeDefn TyInteger) )
-                   , ( "c" , JsonCustom "t" (RespTypeDefn TyDouble) )
-                   , ( "d" , JsonCustom "t" (RespTypeDefn TyString) )
-                   , ( "e" , JsonCustom "t" (RespTypeDefn TyBool) )
-                   , ( "f" , JsonCustom "t" (RespTypeDefn TyObject) )
-                   , ( "g" , JsonCustom "t" (RespTypeDefn TyArray) )
-                   , ( "h" , JsonCustom "t" (RespTypeDefn (TyMaybe TyString)) )
-                   ])))
+          (M (C (InR
+                   (ObjectF
+                      (fromList
+                         [ ( "a" , M (C (InL (Const ( "t" , RespTypeDefn TyAny )))) [] )
+                         , ( "b" , M (C (InL (Const ( "t" , RespTypeDefn TyInt )))) [] )
+                         , ( "c" , M (C (InL (Const ( "t" , RespTypeDefn TyDouble )))) [] )
+                         , ( "d" , M (C (InL (Const ( "t" , RespTypeDefn TyText )))) [] )
+                         , ( "e" , M (C (InL (Const ( "t" , RespTypeDefn TyBool )))) [] )
+                         , ( "f" , M (C (InL (Const ( "t" , RespTypeDefn TyObject )))) [] )
+                         , ( "g" , M (C (InL (Const ( "t" , RespTypeDefn TyArray )))) [] )
+                         , ( "h"
+                           , M (C (InL (Const ( "t" , RespTypeDefn (TyMaybe TyText) )))) []
+                           )
+                         ]))))
+             [])
     }
 ]

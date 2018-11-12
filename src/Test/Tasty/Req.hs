@@ -22,7 +22,7 @@ import qualified Test.Tasty.Providers as Tasty
 import qualified Text.Megaparsec      as P
 import qualified Text.PrettyPrint     as PP
 
-import Test.Tasty.Req.Parse  (parser)
+import Test.Tasty.Req.Parse  (pScript)
 import Test.Tasty.Req.Runner (Error(..), OptionModifier, WithCommand(..), runCommands)
 import Test.Tasty.Req.Types  (Command)
 
@@ -41,7 +41,7 @@ instance Tasty.IsTest ReqTest where
 runIt :: Tasty.OptionSet -> FilePath -> Text -> OptionModifier -> IO Tasty.Result
 runIt _options scriptPath urlPrefix modifier = do
   script <- Text.readFile scriptPath
-  let p = parser :: P.ParsecT Void Text Identity [Command]
+  let p = pScript :: P.ParsecT Void Text Identity [Command]
   try (pure $! P.parse p scriptPath script) >>= \case
     Left exc ->
       pure (Tasty.testFailed (render $ ppDoc (exc :: SomeException)))
