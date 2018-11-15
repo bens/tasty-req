@@ -18,8 +18,6 @@ import qualified Text.Megaparsec.Char.Lexer as P.L
 import Test.Tasty.Req.Parse.Common
   (ensure1stCol, hspace, lexemeH, spaces, symbol, symbolH)
 import Test.Tasty.Req.Types
-  (Command(..), Generator(..), Json, Pattern, Ref(..), ReqCustom(..), RespCustom(..),
-  Side(..), TypeDefn(..))
 
 import qualified Test.Tasty.Req.Parse.JSON as Json
 

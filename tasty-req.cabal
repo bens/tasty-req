@@ -54,6 +54,8 @@ library
     Test.Tasty.Req.Parse
     Test.Tasty.Req.Parse.Common
     Test.Tasty.Req.Parse.JSON
+    Test.Tasty.Req.PPrint
+    Test.Tasty.Req.PPrint.JSON
     Test.Tasty.Req.Runner
     Test.Tasty.Req.Types
     Test.Tasty.Req.Verify

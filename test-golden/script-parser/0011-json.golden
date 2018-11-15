@@ -1,39 +1,13 @@
-[ Command
-    { command'id = 1
-    , command'always = False
-    , command'method = "GET"
-    , command'url = [ Right "/" ]
-    , command'request_body = Nothing
-    , command'response_body =
-        Just
-          (M (C (InR
-                   (ObjectF
-                      (fromList
-                         [ ( "a" , M (C (InR NullF)) [] )
-                         , ( "b" , M (C (InR TrueF)) [] )
-                         , ( "c" , M (C (InR FalseF)) [] )
-                         , ( "d" , M (C (InR (TextF "foo"))) [] )
-                         , ( "e" , M (C (InR (TextF "abc\nxyz\tuvw"))) [] )
-                         , ( "f"
-                           , M (C (InR
-                                     (ArrayF
-                                        [ M (C (InR (IntF 1))) []
-                                        , M (C (InR (IntF 2))) []
-                                        , M (C (InR (IntF 3))) []
-                                        ])))
-                               []
-                           )
-                         , ( "g"
-                           , M (C (InR
-                                     (ObjectF
-                                        (fromList
-                                           [ ( "x" , M (C (InR NullF)) [] )
-                                           , ( "y" , M (C (InR TrueF)) [] )
-                                           , ( "z" , M (C (InR FalseF)) [] )
-                                           ]))))
-                               []
-                           )
-                         ]))))
-             [])
-    }
-]
+1: GET /
+---
+{"g": {"z": false,
+       "y": true,
+       "x": null},
+ "f": [1,
+       2,
+       3],
+ "e": "abc\nxyz\tuvw",
+ "d": "foo",
+ "c": false,
+ "b": true,
+ "a": null}

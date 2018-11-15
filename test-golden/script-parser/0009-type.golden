@@ -1,25 +1,10 @@
-[ Command
-    { command'id = 1
-    , command'always = False
-    , command'method = "GET"
-    , command'url = [ Right "/" ]
-    , command'request_body = Nothing
-    , command'response_body =
-        Just
-          (M (C (InR
-                   (ObjectF
-                      (fromList
-                         [ ( "a" , M (C (InL (Const ( "t" , RespTypeDefn TyAny )))) [] )
-                         , ( "b" , M (C (InL (Const ( "t" , RespTypeDefn TyInt )))) [] )
-                         , ( "c" , M (C (InL (Const ( "t" , RespTypeDefn TyDouble )))) [] )
-                         , ( "d" , M (C (InL (Const ( "t" , RespTypeDefn TyText )))) [] )
-                         , ( "e" , M (C (InL (Const ( "t" , RespTypeDefn TyBool )))) [] )
-                         , ( "f" , M (C (InL (Const ( "t" , RespTypeDefn TyObject )))) [] )
-                         , ( "g" , M (C (InL (Const ( "t" , RespTypeDefn TyArray )))) [] )
-                         , ( "h"
-                           , M (C (InL (Const ( "t" , RespTypeDefn (TyMaybe TyText) )))) []
-                           )
-                         ]))))
-             [])
-    }
-]
+1: GET /
+---
+{"h": {:t maybe string},
+ "g": {:t array},
+ "f": {:t object},
+ "e": {:t boolean},
+ "d": {:t string},
+ "c": {:t double},
+ "b": {:t integer},
+ "a": {:t any}}

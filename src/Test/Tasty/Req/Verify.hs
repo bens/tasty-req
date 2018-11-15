@@ -4,16 +4,14 @@ module Test.Tasty.Req.Verify
   ( Mismatch(..), verify
   ) where
 
-import Control.Monad      (unless)
-import Control.Recursion  (Fix(..))
-import Data.AEq           ((~==))
-import Data.Functor.Const (Const(..))
-import Data.Functor.Sum   (Sum(..))
-import Data.Map           (Map)
-import Data.String        (fromString)
-import Data.Text          (Text)
-import Data.Traversable   (for)
-import Data.Validation    (Validation(Failure))
+import Control.Monad     (unless)
+import Control.Recursion (Fix(..))
+import Data.AEq          ((~==))
+import Data.Map          (Map)
+import Data.String       (fromString)
+import Data.Text         (Text)
+import Data.Traversable  (for)
+import Data.Validation   (Validation(Failure))
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -47,16 +45,16 @@ vValue
   -> Json
   -> Validation [Mismatch] Json
 vValue path pat val = case (pat, val) of
-  (Fix (C (InR    NullF       )), Fix    NullF    ) -> pure val
-  (Fix (C (InR    TrueF       )), Fix    TrueF    ) -> pure val
-  (Fix (C (InR   FalseF       )), Fix   FalseF    ) -> pure val
-  (Fix (C (InR (  TextF   p_x))), Fix   (TextF  x)) | p_x == x -> pure val
-  (Fix (C (InR (   IntF   p_n))), Fix    (IntF  n)) | p_n == n -> pure val
-  (Fix (C (InR (DoubleF   p_n))), Fix (DoubleF  n)) | p_n ~== n -> pure val
-  (Fix (C (InR (DoubleF   p_n))), Fix    (IntF  n)) | p_n == fromIntegral n -> pure (Fix (DoubleF p_n))
-  (Fix (C (InR (ObjectF   p_o))), Fix (ObjectF  o)) -> Fix . ObjectF <$> vObject path p_o  o
-  (Fix (C (InR ( ArrayF  p_xs))), Fix  (ArrayF xs)) -> Fix . ArrayF  <$> vArray  path p_xs xs
-  (Fix (C (InL (Const (_, ty)))), Fix            _) -> vTypeDefn path ty val
+  (Fix (J    NullF       ), Fix    NullF    ) -> pure val
+  (Fix (J    TrueF       ), Fix    TrueF    ) -> pure val
+  (Fix (J   FalseF       ), Fix   FalseF    ) -> pure val
+  (Fix (J (  TextF   p_x)), Fix   (TextF  x)) | p_x == x -> pure val
+  (Fix (J (   IntF   p_n)), Fix    (IntF  n)) | p_n == n -> pure val
+  (Fix (J (DoubleF   p_n)), Fix (DoubleF  n)) | p_n ~== n -> pure val
+  (Fix (J (DoubleF   p_n)), Fix    (IntF  n)) | p_n == fromIntegral n -> pure (Fix (DoubleF p_n))
+  (Fix (J (ObjectF   p_o)), Fix (ObjectF  o)) -> Fix . ObjectF <$> vObject path p_o  o
+  (Fix (J ( ArrayF  p_xs)), Fix  (ArrayF xs)) -> Fix . ArrayF  <$> vArray  path p_xs xs
+  (Fix (C         (_, ty)), Fix            _) -> vTypeDefn path ty val
   (_, _) -> Failure [WrongValue path pat val]
 
 vObject

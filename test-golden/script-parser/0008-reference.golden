@@ -1,13 +1,3 @@
-[ Command
-    { command'id = 1
-    , command'always = False
-    , command'method = "POST"
-    , command'url = [ Right "/" ]
-    , command'request_body = Nothing
-    , command'response_body =
-        Just
-          (M (C (InL
-                   (Const ( "r" , RespRef (Ref 1 Response [] (fromList [])) ))))
-             [])
-    }
-]
+1: POST /
+---
+{:r 1!}

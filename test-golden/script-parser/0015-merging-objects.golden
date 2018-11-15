@@ -1,51 +1,8 @@
-[ Command
-    { command'id = 1
-    , command'always = False
-    , command'method = "POST"
-    , command'url = [ Right "/" ]
-    , command'request_body =
-        Just
-          (M (C (InR
-                   (ObjectF (fromList [ ( "a" , M (C (InR (IntF 0))) [] ) ]))))
-             [])
-    , command'response_body =
-        Just
-          (M (C (InR
-                   (ObjectF
-                      (fromList
-                         [ ( "a"
-                           , M (C (InL
-                                     (Const
-                                        ( "r"
-                                        , RespRef (Ref 1 Request [ Right "a" ] (fromList []))
-                                        ))))
-                               []
-                           )
-                         ]))))
-             [ C (InR
-                    (ObjectF
-                       (fromList
-                          [ ( "b"
-                            , M (C (InL
-                                      (Const
-                                         ( "r"
-                                         , RespRef (Ref 1 Request [ Right "a" ] (fromList []))
-                                         ))))
-                                []
-                            )
-                          ])))
-             , C (InR
-                    (ObjectF
-                       (fromList
-                          [ ( "c"
-                            , M (C (InL
-                                      (Const
-                                         ( "r"
-                                         , RespRef (Ref 1 Request [ Right "a" ] (fromList []))
-                                         ))))
-                                []
-                            )
-                          ])))
-             ])
-    }
-]
+1: POST /
+{"a": 0}
+---
+{"a": {:r 1?["a"]}}
+<>
+{"b": {:r 1?["a"]}}
+<>
+{"c": {:r 1?["a"]}}

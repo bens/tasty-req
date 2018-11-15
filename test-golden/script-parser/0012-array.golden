@@ -1,66 +1,8 @@
-[ Command
-    { command'id = 1
-    , command'always = False
-    , command'method = "GET"
-    , command'url = [ Right "/" ]
-    , command'request_body =
-        Just
-          (M (C (InR
-                   (ArrayF
-                      [ M (C (InR
-                                (ObjectF (fromList [ ( "foo" , M (C (InR (IntF 123))) [] ) ]))))
-                          []
-                      , M (C (InR
-                                (ObjectF
-                                   (fromList
-                                      [ ( "bar"
-                                        , M (C (InR
-                                                  (ObjectF
-                                                     (fromList
-                                                        [ ( "abc" , M (C (InR NullF)) [] ) ]))))
-                                            []
-                                        )
-                                      ]))))
-                          []
-                      ])))
-             [])
-    , command'response_body =
-        Just
-          (M (C (InR
-                   (ArrayF
-                      [ M (C (InR
-                                (ObjectF
-                                   (fromList
-                                      [ ( "bib"
-                                        , M (C (InL
-                                                  (Const
-                                                     ( "r"
-                                                     , RespRef
-                                                         (Ref 1 Request [ Left 0 ] (fromList []))
-                                                     ))))
-                                            [ C (InR
-                                                   (ObjectF
-                                                      (fromList
-                                                         [ ( "uff" , M (C (InR (IntF 987))) [] )
-                                                         ])))
-                                            ]
-                                        )
-                                      , ( "bob"
-                                        , M (C (InL
-                                                  (Const
-                                                     ( "r"
-                                                     , RespRef
-                                                         (Ref
-                                                            1
-                                                            Request
-                                                            [ Left 1 , Right "bar" , Right "abc" ]
-                                                            (fromList []))
-                                                     ))))
-                                            []
-                                        )
-                                      ]))))
-                          []
-                      ])))
-             [])
-    }
-]
+1: GET /
+[{"foo": 123},
+ {"bar": {"abc": null}}]
+---
+[{"bob": {:r 1?[1]["bar"]["abc"]},
+  "bib": {:r 1?[0]}
+         <>
+         {"uff": 987}}]

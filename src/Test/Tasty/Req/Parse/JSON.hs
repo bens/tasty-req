@@ -14,8 +14,7 @@
 {-# LANGUAGE TupleSections     #-}
 
 module Test.Tasty.Req.Parse.JSON
-  (
-    -- * Parsers
+  ( -- * Parsers
     Parser, Ctx(..), runParser, runParserJSON, runParserPattern, mapParser
     -- * Custom Parsers
   , CustomParser, customParsers, emptyCustom, withCustom
@@ -25,17 +24,13 @@ module Test.Tasty.Req.Parse.JSON
   , custom, combine
     -- * Typeful parsers
   , text', integer', number'
-    -- * Pretty printing
-  , ppJson, ppCustomOnly, ppPattern
   ) where
 
 import Control.Applicative (empty, liftA2, many, some, (<|>))
-import Control.Recursion   (Fix(..), cata)
+import Control.Recursion   (Fix(..))
 import Data.Char           (chr, isDigit, isHexDigit, isLower, isUpper, ord)
 import Data.Foldable       (asum)
-import Data.Functor.Const  (Const(..))
-import Data.Functor.Sum    (Sum(..))
-import Data.List           (foldl', intersperse, sort)
+import Data.List           (foldl', sort)
 import Data.Map            (Map)
 import Data.Text           (Text)
 
@@ -43,57 +38,9 @@ import qualified Data.Map             as Map
 import qualified Data.Text            as Text
 import qualified Text.Megaparsec      as P
 import qualified Text.Megaparsec.Char as P.C
-import qualified Text.PrettyPrint     as PP
 
 import Test.Tasty.Req.Parse.Common (lexeme, symbol)
 import Test.Tasty.Req.Types
-  (CustomF(..), Json, JsonF(..), MergeF(..), Pattern, PatternF)
-
--- PRETTY PRINTING
-
-ppJson :: Json -> PP.Doc
-ppJson = cata ppJsonF
-
-ppCustomOnly :: (a -> PP.Doc) -> Fix (CustomF a) -> PP.Doc
-ppCustomOnly = cata . ppCustomF
-
-ppPattern :: (a -> PP.Doc) -> Pattern a -> PP.Doc
-ppPattern = cata . ppPatternF
-
--- PRETTY PRINTING ALGEBRAS
-
-ppJsonF :: JsonF PP.Doc -> PP.Doc
-ppJsonF = \case
-  NullF     -> PP.text "null"
-  TrueF     -> PP.text "true"
-  FalseF    -> PP.text "false"
-  TextF   x -> PP.text (show x)
-  IntF    n -> PP.text (show n)
-  DoubleF n -> PP.text (show n)
-  ObjectF o -> ppObject o
-  ArrayF xs -> ppArray xs
-
-ppCustomF :: (a -> PP.Doc) -> CustomF a PP.Doc -> PP.Doc
-ppCustomF pp = \case
-  C (InL (Const (nm, x))) ->
-    PP.braces $ (PP.colon <> PP.text (Text.unpack nm)) PP.<+> pp x
-  C (InR j) ->
-    ppJsonF j
-
-ppPatternF :: (a -> PP.Doc) -> PatternF a PP.Doc -> PP.Doc
-ppPatternF pp (M x xs) =
-  PP.vcat (intersperse (PP.text "<>") (map (ppCustomF pp) (x:xs)))
-
-ppObject :: Map Text PP.Doc -> PP.Doc
-ppObject m = PP.braces (PP.nest 2 (foldr (.) id docs mempty))
-  where
-    docs = intersperse (<> PP.comma) $ map f (Map.toList m)
-    f (k, v) = (PP.$$ ((PP.text (show k) <> PP.colon) PP.<+> v))
-
-ppArray :: [PP.Doc] -> PP.Doc
-ppArray xs = PP.brackets (PP.nest 2 (foldr (.) id docs mempty))
-  where
-    docs = intersperse (<> PP.comma) $ map (PP.$$) xs
 
 -- PARSER
 
@@ -139,8 +86,8 @@ runParserPattern
   -> P.ParsecT e Text m a
 runParserPattern = runParser injJ (Just injC) (Just injM)
   where
-    injJ x                 = Fix (M (C (InR x)) [])
-    injC nm x              = Fix (M (C (InL (Const (nm, x)))) [])
+    injJ x                 = Fix (M (J x) [])
+    injC nm x              = Fix (M (C (nm, x)) [])
     injM (Fix (M x xs)) ys = Fix (M x (xs ++ (ys >>= collect)))
     collect (Fix (M x xs)) = x:xs
 

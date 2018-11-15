@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE TypeFamilies      #-}
 
 module Test.Tasty.Req.Types
   ( ReqCustom(..), RespCustom(..), Command(..)
@@ -20,10 +21,8 @@ module Test.Tasty.Req.Types
 
 import Control.Lens         (ATraversal, Traversal, cloneTraversal, mapMOf)
 import Control.Monad        (foldM, (>=>))
-import Control.Recursion    (Fix(Fix), cata, cataM)
+import Control.Recursion    (Base, Fix(Fix), Recursive(..), cata, cataM)
 import Data.Functor.Classes (Eq1(..), Show1(..))
-import Data.Functor.Const   (Const(..))
-import Data.Functor.Sum     (Sum(..))
 import Data.List.NonEmpty   (NonEmpty((:|)))
 import Data.Map             (Map)
 import Data.Set             (Set)
@@ -71,7 +70,6 @@ data RespCustom
   = RespRef Ref
   | RespTypeDefn TypeDefn
     deriving (Eq, Show)
-
 data Command = Command
   { command'id            :: Int
   , command'always        :: Bool
@@ -95,7 +93,7 @@ data JsonF a
   | DoubleF Double
   | ObjectF (Map Text a)
   | ArrayF [a]
-    deriving (Functor, Foldable, Traversable, Eq, Show)
+    deriving (Functor, Foldable, Traversable, Eq, Ord, Show)
 
 instance Eq1 JsonF where
   liftEq op a b = case (a, b) of
@@ -123,15 +121,20 @@ instance Show1 JsonF where
 
 -- JSON patterns without merging
 
-newtype CustomF x a = C (Sum (Const (Text, x)) JsonF a)
-  deriving (Functor, Foldable, Traversable, Eq, Show)
+data CustomF x a
+  = C (Text, x)
+  | J (JsonF a)
+    deriving (Functor, Foldable, Traversable, Eq, Ord, Show)
 
 instance Eq x => Eq1 (CustomF x) where
-  liftEq op (C x) (C y) = liftEq op x y
+  liftEq  _ (C x) (C y) = x == y
+  liftEq op (J x) (J y) = liftEq op x y
+  liftEq _ _ _          = False
 
 instance Show x => Show1 (CustomF x) where
-  liftShowsPrec p p_list d (C x) =
-    strApp1 "C" d (liftShowsPrec p p_list 11 x)
+  liftShowsPrec p p_list d = \case
+    C x -> strApp1 "C" d (showsPrec 11 x)
+    J x -> strApp1 "J" d (liftShowsPrec p p_list 11 x)
 
 patternCustoms
   :: Traversal
@@ -141,10 +144,8 @@ patternCustoms
        (Either b (JsonF (Pattern b)))
 patternCustoms f (M x xs) = M <$> g x <*> traverse g xs
   where
-    g (C (InL (Const (nm, a)))) =
-      either (C . InL . Const . (nm,)) (C . InR) <$> f (nm, a)
-    g (C (InR j)) =
-      pure (C (InR j))
+    g (C (nm, a)) = either (C . (nm,)) J <$> f (nm, a)
+    g (J j)       = pure (J j)
 
 patternCustomsFinal
   :: Traversal
@@ -154,8 +155,8 @@ patternCustomsFinal
        (Either Void (JsonF (Fix (MergeF JsonF))))
 patternCustomsFinal f (M x xs) = M <$> g x  <*> traverse g xs
   where
-    g (C (InL (Const (nm, a)))) = either absurd id <$> f (nm, a)
-    g (C (InR j))               = pure j
+    g (C (nm, a)) = either absurd id <$> f (nm, a)
+    g (J j)       = pure j
 
 elimCustom
   :: (Traversable f, Monad m)
@@ -175,7 +176,7 @@ elimCustomAlg trav subst =
   fmap Fix . mapMOf (cloneTraversal trav) (uncurry subst)
 
 embedJsonF' :: Json -> Fix (CustomF x)
-embedJsonF' = cata $ Fix . C . InR
+embedJsonF' = cata $ Fix . J
 
 
 -- JSON patterns with merging
@@ -200,7 +201,7 @@ instance Show1 f => Show1 (MergeF f) where
       . liftShowsPrec (liftShowsPrec p p_list) (liftShowList p p_list) 11 xs
 
 mergeEmbedJson :: Json -> Pattern a
-mergeEmbedJson = cata $ Fix . flip M [] . C . InR
+mergeEmbedJson = cata $ Fix . flip M [] . J
 
 elimMerge
   :: (Traversable f, Monad m)

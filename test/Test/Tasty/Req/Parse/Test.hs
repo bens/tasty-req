@@ -15,12 +15,14 @@ import Test.Tasty            (TestTree, testGroup)
 import Test.Tasty.Golden     (findByExtension, goldenVsFileDiff)
 import Text.Show.Pretty      (ppShow)
 
-import qualified Data.Text.IO    as Text
-import qualified Text.Megaparsec as P
+import qualified Data.Text.IO     as Text
+import qualified Text.Megaparsec  as P
+import qualified Text.PrettyPrint as PP
 
 import Test.Tasty.Req.Types (Command, Json)
 
-import qualified Test.Tasty.Req.Parse as Parse
+import qualified Test.Tasty.Req.Parse  as Parse
+import qualified Test.Tasty.Req.PPrint as PPrint
 
 mkScriptTests :: FilePath -> IO TestTree
 mkScriptTests dir = do
@@ -38,7 +40,7 @@ mkScriptTests dir = do
       try (pure $! P.parse p reqPath script) >>= \case
         Left exc -> let _ = exc :: SomeException in writeFile outPath (show exc ++ "\n")
         Right (Left err) -> writeFile outPath (P.errorBundlePretty err)
-        Right (Right x)  -> writeFile outPath (ppShow x ++ "\n")
+        Right (Right x)  -> writeFile outPath (PP.render (PP.vcat (map PPrint.ppCommand x)) ++ "\n")
 
 mkJsonTests :: FilePath -> IO TestTree
 mkJsonTests dir = do

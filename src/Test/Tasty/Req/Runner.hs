@@ -30,7 +30,6 @@ import Control.Recursion          (Fix(Fix), cata, project)
 import Data.Bifunctor             (Bifunctor, bimap, first)
 import Data.ByteString.Char8      (ByteString)
 import Data.Default               (def)
-import Data.Functor.Sum           (Sum(InR))
 import Data.Int                   (Int16, Int8)
 import Data.List.NonEmpty         (NonEmpty((:|)))
 import Data.Map                   (Map)
@@ -50,14 +49,11 @@ import qualified Network.HTTP.Req      as Req
 import qualified Text.Megaparsec       as P
 import qualified Text.PrettyPrint      as PP
 
-import Test.Tasty.Req.Parse  (pResponse)
+import Test.Tasty.Req.Parse       (pResponse)
+import Test.Tasty.Req.PPrint.JSON (ppJson)
 import Test.Tasty.Req.Types
-  (Command(..), CustomF(..), Generator(..), Json, JsonF(..), MergeF(..), Pattern,
-  Ref(..), ReqCustom(..), RespCustom(..), Side(..), elimCustom, elimMerge,
-  patternCustoms, patternCustomsFinal)
-import Test.Tasty.Req.Verify (Mismatch(..), verify)
 
-import qualified Test.Tasty.Req.Parse.JSON as Json
+import Test.Tasty.Req.Verify (Mismatch(..), verify)
 
 data WithCommand e
   = WithCommand Command e
@@ -250,7 +246,7 @@ buildRequestBody i (Just req) = do
     -- Perform merges on 'JsonF' values.
     >>= elimMerge (\(M x xs) -> pure (x :| xs)) merge
   modify (Map.insert (i, Request) req')
-  pure (Req.ReqBodyBs (BS.C.pack (PP.render (Json.ppJson req'))))
+  pure (Req.ReqBodyBs (BS.C.pack (PP.render (ppJson req'))))
 
 parseResponse :: AsError e => Req.BsResponse -> M g e (Maybe Json)
 parseResponse resp
@@ -272,8 +268,8 @@ verifyResponse i p_val val = case (p_val, val) of
     let refOf = \case
           RespRef ref     -> Right ref
           RespTypeDefn ty -> Left ty
-    let merge (C (InR (ObjectF a))) (C (InR (ObjectF b))) =
-          pure (C (InR (ObjectF (a <> b))))
+    let merge (J (ObjectF a)) (J (ObjectF b)) =
+          pure (J (ObjectF (a <> b)))
         merge a b =
           throwError (_Error # BadSquash a b)
     p_x' <- pure p_x
@@ -295,7 +291,7 @@ resolveRef
 resolveRef f _ =
   either (pure . Left) (fmap (Right . fmap g . project) . deref) . f
   where
-    g = cata (Fix . flip M [] . C . InR)
+    g = cata (Fix . flip M [] . J)
 
 deref :: AsError e => Ref -> M g e Json
 deref ref@(Ref i side path0 sans) =
